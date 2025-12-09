@@ -1,0 +1,216 @@
+Bootstrap: docker
+From: rocker/tidyverse:4.4.2
+
+%files
+    scripts /opt/rcomplex/scripts
+    R /opt/rcomplex/R
+
+%labels
+    Author "Martin Paliocha & Torgeir Rhodén Hvidsten"
+    Version "1.0.0"
+    Description "RComPlEx: Co-expressolog discovery across annual and perennial species"
+    HPC "Apptainer 1.4.5+"
+    RVersion "4.4.2"
+
+%help
+    RComPlEx Container for co-expression network analysis
+
+    Usage:
+      apptainer exec RComPlEx.sif Rscript script.R [options]
+
+    Features:
+      - R 4.4.2 with tidyverse ecosystem
+      - Network analysis: igraph, WGCNA
+      - Parallel processing: furrr, future
+      - Data processing: yaml, optparse, glue
+      - Visualization: gplots, RColorBrewer, cowplot
+      - Ready for SLURM and Nextflow integration
+
+    Installed Packages:
+      - tidyverse, igraph, WGCNA, furrr, future, gplots, RColorBrewer
+      - cowplot, DT, matrixStats, optparse, yaml, glue
+
+    Contact: martin.paliocha@iku.glu.se
+
+%environment
+    # Set R_HOME explicitly to avoid RStudio conflicts
+    export R_HOME=/usr/local/lib/R
+    export R_LIBS_USER="/usr/local/lib/R/site-library"
+    export RCOMPLEX_HOME=/opt/rcomplex
+
+    # Ensure reproducibility
+    export LC_ALL=C
+    export LANG=C
+
+    # Parallel processing defaults
+    export OMP_NUM_THREADS=1
+
+    # Avoid interactive prompts
+    export DEBIAN_FRONTEND=noninteractive
+
+%post
+    # Update base system
+    apt-get update -qq
+    apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        git \
+        wget \
+        locales
+
+    # Set locale
+    echo "en_US.UTF-8 UTF-8" > /etc/locale.gen
+    locale-gen en_US.UTF-8
+    update-locale LANG=en_US.UTF-8
+
+    # Install system dependencies (required by R packages and WGCNA)
+    # WGCNA requires: gsl-bin, libgsl0-dev, gfortran
+    # General R development: libssl-dev, libcurl4-openssl-dev, libxml2-dev
+    # Additional: libopenblas-dev, liblapack-dev (for linear algebra)
+    apt-get install -y --no-install-recommends \
+        libssl-dev \
+        libcurl4-openssl-dev \
+        libxml2-dev \
+        libssl3 \
+        gsl-bin \
+        libgsl0-dev \
+        gfortran \
+        libopenblas-dev \
+        liblapack-dev
+
+    # Install R packages using install.packages
+    # Start R and install missing packages
+    R --slave -e "
+        # Set CRAN mirror
+        options(repos = c(CRAN = 'https://cran.r-project.org'))
+
+        # List of essential CRAN packages to install
+        essential_pkgs <- c(
+            'tidyverse',       # Data wrangling and visualization ecosystem
+            'furrr',           # Parallel functional programming
+            'future',          # Evaluation framework (usually pre-installed)
+            'igraph',          # Network/graph analysis (core for RComPlEx)
+            'gplots',          # Extended plotting functions
+            'RColorBrewer',    # Color palettes
+            'cowplot',         # Plot composition and alignment
+            'DT',              # Interactive data tables
+            'optparse',        # Command line argument parsing
+            'yaml',            # YAML configuration file parsing
+            'glue',            # String interpolation
+            'matrixStats'      # Fast matrix functions
+        )
+
+        # Optional/large packages that may require additional dependencies
+        optional_pkgs <- c(
+            'WGCNA'            # Weighted Gene Co-Expression Network Analysis
+        )
+
+        # Install essential packages
+        cat('Installing essential CRAN packages...\n')
+        already_installed <- rownames(installed.packages())
+        to_install <- setdiff(essential_pkgs, already_installed)
+
+        if (length(to_install) > 0) {
+            cat('Installing:', paste(to_install, collapse=', '), '\n')
+            install.packages(to_install, dependencies=TRUE, clean=TRUE, quiet=TRUE)
+        }
+
+        # Try to install optional packages (don't fail if they don't install)
+        cat('\nTrying to install optional packages...\n')
+        for (pkg in optional_pkgs) {
+            already_installed <- rownames(installed.packages())
+            if (!(pkg %in% already_installed)) {
+                cat('Attempting to install', pkg, '...\n')
+                tryCatch({
+                    install.packages(pkg, dependencies=TRUE, clean=TRUE, quiet=TRUE)
+                }, error = function(e) {
+                    cat('Warning: Could not install', pkg, '- it may require additional system dependencies\n')
+                })
+            }
+        }
+
+        # Verify installations
+        cat('\nVerifying core package installations:\n')
+        failures <- c()
+        for (pkg in essential_pkgs) {
+            if (require(pkg, quietly=TRUE, character.only=TRUE)) {
+                cat('  ✓', pkg, '\n')
+            } else {
+                cat('  ✗', pkg, 'FAILED\n')
+                failures <- c(failures, pkg)
+            }
+        }
+
+        cat('\nOptional packages:\n')
+        for (pkg in optional_pkgs) {
+            if (require(pkg, quietly=TRUE, character.only=TRUE)) {
+                cat('  ✓', pkg, '\n')
+            } else {
+                cat('  ○', pkg, '(not available, but optional)\n')
+            }
+        }
+
+        if (length(failures) > 0) {
+            stop(paste('Failed to install required packages:', paste(failures, collapse=', ')))
+        }
+
+        cat('\nContainer setup complete!\n')
+    "
+
+    # Clean up
+    apt-get clean
+    rm -rf /var/lib/apt/lists/*
+
+%runscript
+    exec R "${@}"
+
+%startscript
+    exec R "${@}"
+
+%test
+    # Test that R works
+    echo "Testing R installation..."
+    R --version | head -3
+
+    # Test that key packages load
+    echo "Testing package installations..."
+    R --slave -e "
+        # Essential packages that MUST be present
+        essential <- c('tidyverse', 'igraph', 'furrr', 'future', 'gplots',
+                      'RColorBrewer', 'cowplot', 'DT', 'optparse', 'yaml', 'glue')
+
+        # Optional packages
+        optional <- c('WGCNA')
+
+        cat('Testing', length(essential), 'essential packages...\n')
+        failures <- c()
+        for (pkg in essential) {
+            if (!require(pkg, quietly=TRUE, character.only=TRUE)) {
+                cat('✗', pkg, 'FAILED\n')
+                failures <- c(failures, pkg)
+            } else {
+                cat('✓', pkg, '\n')
+            }
+        }
+
+        if (length(failures) > 0) {
+            stop(paste('Failed to load essential packages:', paste(failures, collapse=', ')))
+        }
+
+        cat('\nTesting optional packages...\n')
+        for (pkg in optional) {
+            if (require(pkg, quietly=TRUE, character.only=TRUE)) {
+                cat('✓', pkg, '\n')
+            } else {
+                cat('○', pkg, '(optional - not available)\n')
+            }
+        }
+
+        cat('\nContainer verification passed!\n')
+    "
+
+    # Test Rscript
+    echo "Testing Rscript..."
+    Rscript -e "cat('✓ Rscript works!\n')"
+
+    echo "Container tests complete!"
