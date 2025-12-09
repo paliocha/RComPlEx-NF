@@ -1,0 +1,24 @@
+name: rcomplex
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - r-base=4.4.2
+  - r-tidyverse
+  - r-future
+  - r-furrr
+  - r-gplots
+  - r-rcolorbrewer
+  - r-cowplot
+  - r-dt
+  - r-matrixstats
+  - r-optparse
+  - r-yaml
+  - r-igraph
+  - r-matrix
+  - r-ggplot2
+  - r-glue
+  - r-rmarkdown
+  # Optional: For threaded correlation computation (if you decide to use WGCNA's cor)
+  # - bioconda::bioconductor-wgcna

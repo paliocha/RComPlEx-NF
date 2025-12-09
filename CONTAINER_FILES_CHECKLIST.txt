@@ -1,0 +1,201 @@
+================================================================================
+RComPlEx Container Implementation - Files Checklist
+Date: December 8, 2025
+================================================================================
+
+CORE CONTAINER FILES
+================================================================================
+
+✓ RComPlEx.def
+  - Enhanced with WGCNA package
+  - System dependencies added (GSL, BLAS/LAPACK, gfortran)
+  - Essential vs optional package separation
+  - Verification tests included
+  Location: /net/fs-2/scale/OrionStore/Home/martpali/AnnualPerennial/RComPlEx/
+
+✓ apptainer/build_container.sh
+  - Smart storage selection ($WORK/user/$USER → $TMPDIR → /tmp)
+  - Builds in local filesystem (avoids NFS issues)
+  - Moves sandbox to project directory
+  - Proper error handling and cleanup
+  Location: /net/fs-2/scale/OrionStore/Home/martpali/AnnualPerennial/RComPlEx/apptainer/
+
+✓ nextflow.config
+  - Apptainer 1.4.5 compatible (no --containall)
+  - Container disabled by default
+  - Updated singularity_hpc profile
+  - Correct process resource configurations
+  Location: /net/fs-2/scale/OrionStore/Home/martpali/AnnualPerennial/RComPlEx/
+
+
+DOCUMENTATION FILES (NEW)
+================================================================================
+
+✓ BUILD_CONTAINER_NOW.md
+  Purpose: Quick start guide with exact commands
+  Read if: You want to build immediately
+  Location: /net/fs-2/scale/OrionStore/Home/martpali/AnnualPerennial/RComPlEx/
+
+✓ CONTAINER_QUICK_REFERENCE.md
+  Purpose: Command cheat sheet for common tasks
+  Read if: You want quick commands for reference
+  Location: /net/fs-2/scale/OrionStore/Home/martpali/AnnualPerennial/RComPlEx/
+
+✓ CONTAINER_GUIDE.md
+  Purpose: Comprehensive build and usage guide
+  Read if: You need detailed information and troubleshooting
+  Location: /net/fs-2/scale/OrionStore/Home/martpali/AnnualPerennial/RComPlEx/
+
+✓ CONTAINER_IMPLEMENTATION_SUMMARY.md
+  Purpose: Technical details of all changes made
+  Read if: You want to understand the implementation
+  Location: /net/fs-2/scale/OrionStore/Home/martpali/AnnualPerennial/RComPlEx/
+
+✓ CONTAINER_STATUS.md
+  Purpose: Status report and next steps
+  Read if: You want overview of what was done
+  Location: /net/fs-2/scale/OrionStore/Home/martpali/AnnualPerennial/RComPlEx/
+
+✓ CONTAINER_FILES_CHECKLIST.txt
+  Purpose: This file - verification checklist
+  Read if: You want to verify all files are in place
+  Location: /net/fs-2/scale/OrionStore/Home/martpali/AnnualPerennial/RComPlEx/
+
+
+TO BUILD THE CONTAINER
+================================================================================
+
+1. Read: BUILD_CONTAINER_NOW.md
+2. Run: bash apptainer/build_container.sh
+   (inside qlogin session with tmux)
+3. Wait: 15-30 minutes
+4. Verify: ls -lh .apptainer_sandbox/
+5. Test: nextflow run main.nf -profile slurm,singularity_hpc --tissues root --test_mode true
+
+
+AFTER SUCCESSFUL BUILD
+================================================================================
+
+Container location: /net/fs-2/scale/OrionStore/Home/martpali/AnnualPerennial/RComPlEx/.apptainer_sandbox/
+Container size: ~5-6 GB
+
+Run pipeline with container:
+  nextflow run main.nf -profile slurm,singularity_hpc --tissues root --test_mode true
+
+Run pipeline without container (system R):
+  nextflow run main.nf --tissues root --test_mode true
+
+Submit to SLURM with container:
+  sbatch slurm/run_nextflow.sh "slurm,singularity_hpc" "" false
+
+
+WHICH DOCUMENT TO READ?
+================================================================================
+
+For immediate build:
+  → BUILD_CONTAINER_NOW.md (quick start)
+
+For quick reference:
+  → CONTAINER_QUICK_REFERENCE.md (commands)
+
+For comprehensive info:
+  → CONTAINER_GUIDE.md (detailed guide)
+
+For technical details:
+  → CONTAINER_IMPLEMENTATION_SUMMARY.md (changes made)
+
+For status overview:
+  → CONTAINER_STATUS.md (what was done)
+
+
+KEY CHANGES SUMMARY
+================================================================================
+
+File: RComPlEx.def
+  - Added WGCNA as optional package
+  - Added GSL, BLAS/LAPACK, gfortran system dependencies
+  - Enhanced package verification
+
+File: apptainer/build_container.sh
+  - Smart temporary storage selection
+  - NFS ownership issue fixed (build locally, move after)
+  - Better error handling
+
+File: nextflow.config
+  - Apptainer 1.4.5 compatible
+  - Container disabled by default
+  - Correct process resource configs
+
+
+TROUBLESHOOTING QUICK LINKS
+================================================================================
+
+Build fails with NFS ownership error?
+  → See: CONTAINER_GUIDE.md → "Build Fails with Operation not permitted"
+  → Solution: Use interactive session (qlogin), script uses local storage
+
+Build takes forever?
+  → Normal: 15-30 minutes
+  → Check: tail -f .nextflow.log in another window
+
+Build interrupted by connection loss?
+  → Use tmux: tmux attach -t rcomplex_build
+
+WGCNA not in final container?
+  → Expected: WGCNA is optional, not critical
+  → Pipeline works without it
+  → See: CONTAINER_GUIDE.md → "Container Runs but WGCNA Not Available"
+
+
+VERIFICATION STEPS
+================================================================================
+
+After build, verify:
+
+1. Sandbox exists:
+   ls -lh .apptainer_sandbox/
+   Expected: directory, ~5-6 GB
+
+2. Essential packages load:
+   apptainer exec .apptainer_sandbox R --slave -e \
+     "pkgs <- c('igraph', 'furrr', 'yaml', 'optparse', 'glue'); \
+      sapply(pkgs, require, quietly=TRUE)"
+   Expected: All TRUE
+
+3. Rscript works:
+   apptainer exec .apptainer_sandbox Rscript -e "cat('OK\n')"
+   Expected: Prints "OK"
+
+4. Container has right Nextflow entry:
+   nextflow run main.nf -profile slurm,singularity_hpc --tissues root --test_mode true
+   Expected: Pipeline starts without container errors
+
+
+NEXT STEPS
+================================================================================
+
+☐ Read BUILD_CONTAINER_NOW.md
+☐ Run qlogin for interactive session
+☐ Create tmux session
+☐ Execute bash apptainer/build_container.sh
+☐ Wait for completion (15-30 min)
+☐ Verify .apptainer_sandbox exists
+☐ Test pipeline with container: nextflow run main.nf -profile slurm,singularity_hpc --tissues root --test_mode true
+☐ (Optional) Run full pipeline on HPC
+
+
+CONTACT & REFERENCES
+================================================================================
+
+Main pipeline documentation: README.md
+Refactoring summary: REFACTORING_COMPLETED.md
+Environment setup: ENVIRONMENT_VERIFICATION.md
+
+For Apptainer docs: https://apptainer.org/docs/
+For Nextflow Singularity: https://www.nextflow.io/docs/latest/singularity.html
+For rocker images: https://rocker-project.org/
+
+================================================================================
+Status: READY TO BUILD ✓
+Last Updated: December 8, 2025
+================================================================================
