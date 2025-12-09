@@ -10,7 +10,7 @@ A modern Nextflow implementation for identifying conserved co-expressologs (co-e
 
 ## Overview
 
-This pipeline identifies multi-species gene cliques where orthologous genes are **ALL pairwise co-expressed** across species. Unlike simple conservation tests, the clique-based approach ensures that every gene pair in a clique shows significant co-expression, forming complete subgraphs in the co-expression network.
+This pipeline identifies multi-species gene cliques where orthologous genes are **all pairwise co-expressed** across species. Unlike simple conservation tests, the clique-based approach ensures that every gene pair in a clique shows significant co-expression, forming complete subgraphs in the co-expression network.
 
 ### Key Features
 
@@ -298,15 +298,7 @@ tail -50 logs/RComPlEx_JOBID_ARRAYID.out
 
 If you use this pipeline, please cite:
 
-- RComPlEx method: Netotea et al. (2014)
-- Original implementation: Hvidsten & Paliocha
-- Pipeline repository: [Add DOI/URL when available]
-
-## License
-
-[Specify license]
-
-## Contact
-
-Martin Paliocha - [Add contact info]
-Torgeir Rhodén Hvidsten - [Add contact info]
+- ComPlEx method: Netotea et al. (2014) BMC Genomics doi:[10.1186/1471-2164-15-106](https://doi.org/10.1186/1471-2164-15-106)
+- R implementation: Torgeir R. Hvidsten
+- Nextflow pipeline & parallelization: Martin Paliocha
+- Pipeline repository: [paliocha/RComPlEx-NF](https://github.com/paliocha/RComPlEx-NF)
