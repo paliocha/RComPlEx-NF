@@ -1,16 +1,63 @@
-# RComPlEx-NF: Co-expressolog discovery using Nexflow
+# RComPlEx-NF: Comparative Analysis of Plant Co-Expression Networks in R
 
-A modern Nextflow implementation for identifying conserved co-expressologs (co-expressed orthologs) across species with different life habits (annual vs perennial) in tissue-specific contexts.
+**RComPlEx** (R Comparative Plant Expression Analysis) is a Nextflow pipeline that identifies **conserved co-expressologs** - orthologous genes that maintain coordinated expression patterns across evolutionarily divergent species.
+
+## What Makes RComPlEx Different?
+
+Unlike traditional comparative genomics approaches that focus on sequence conservation alone, RComPlEx discovers genes that are:
+
+1. **Orthologous** - Share common evolutionary ancestry
+2. **Co-expressed** - Show correlated expression patterns within each species  
+3. **Functionally conserved** - Maintain similar regulatory relationships across species
+4. **Module members** - Part of complete functional networks (cliques), not just pairwise connections
+
+### The Clique Advantage
+
+RComPlEx finds **multi-species gene cliques** where **ALL** pairwise relationships are conserved:
+
+- **Traditional approach**: "Gene A and Gene B are co-expressed in both species"
+- **RComPlEx cliques**: "Genes A, B, C, and D are ALL mutually co-expressed across all species" (6 pairwise relationships for 4 genes, all significant)
+
+This ensures discovery of **complete functional modules** with tight coordination, providing stronger evidence of conserved biological function than pairwise comparisons alone.
 
 ## Documentation
 
-- **[METHOD.md](METHOD.md)** - Detailed explanation of the RComPlEx algorithm, hypergeometric testing, and clique detection
-- **[INPUT_FORMAT.md](INPUT_FORMAT.md)** - Data structure requirements, file formats, and validation
-- **[INSTALLATION.md](INSTALLATION.md)** - Setup instructions for local, HPC, and Docker environments
+- **[METHOD.md](METHOD.md)** - Detailed algorithm explanation, statistical methods, hypergeometric testing
+- **[INPUT_FORMAT.md](INPUT_FORMAT.md)** - Data requirements, file formats, and validation
+- **[INSTALLATION.md](INSTALLATION.md)** - Setup instructions for local, HPC, and container environments
+- **[PROCESS_FLOW.txt](PROCESS_FLOW.txt)** - Step-by-step execution flow with biological context
 
-## Overview
+## Scientific Background
 
-This pipeline identifies multi-species gene cliques where orthologous genes are **all pairwise co-expressed** across species. Unlike simple conservation tests, the clique-based approach ensures that every gene pair in a clique shows significant co-expression, forming complete subgraphs in the co-expression network.
+### Biological Question
+
+**Do genes that are co-expressed in one species maintain those co-expression relationships in related species?**
+
+Conserved co-expression suggests:
+- **Shared regulatory mechanisms** (transcription factors, enhancers)
+- **Functional coordination** (pathway components, protein complexes)
+- **Evolutionary constraint** (selection maintains co-regulation)
+- **Biological importance** (essential processes preserved across species)
+
+### Life Habit Stratification
+
+This implementation focuses on comparing **annual vs. perennial grasses**:
+
+- **Annual plants**: Complete life cycle in one growing season (rapid growth, high reproduction)
+- **Perennial plants**: Live multiple years (resource storage, stress tolerance, dormancy)
+
+By stratifying cliques by life habit, RComPlEx identifies:
+- **Annual-specific modules**: Genes coordinated uniquely in annual species
+- **Perennial-specific modules**: Genes coordinated uniquely in perennial species  
+- **Shared modules**: Core processes conserved across all plants
+
+### Tissue Specificity
+
+Analyzes **root** and **leaf** tissues independently:
+- **Root**: Nutrient uptake, water transport, stress response, storage
+- **Leaf**: Photosynthesis, gas exchange, defense, transpiration
+
+Tissue-specific cliques reveal organ-specialized regulatory networks.
 
 ### Key Features
 
@@ -137,57 +184,183 @@ RComPlEx/
 
 ## Algorithm Overview
 
-### Workflow Steps (Nextflow Pipeline)
+### Pipeline Workflow (5 Main Steps)
 
-**PREPARE_PAIR**: Per-pair data extraction
-- Loads variance-stabilized expression data (vst_hog.RDS, tissue-filtered)
-- Extracts ortholog pairs from hierarchical orthogroups (N1_clean.RDS)
-- Creates working directories with expression matrices and ortholog mappings
+#### Step 0: PREPARE_PAIR (Data Preparation)
 
-**RCOMPLEX_01**: Load & filter data for species pair
-- Extract orthologs present in both species' expression datasets
-- Output: `01_filtered_data.RData`
+**Purpose**: Extract tissue-specific expression data for each species pair
 
-**RCOMPLEX_02**: Compute co-expression networks
-- Correlations: Spearman (configurable: Pearson, Kendall)
-- Normalization: Mutual Rank (configurable: CLR)
-- Density threshold: Top 3% of correlations (configurable)
-- Parallel across species (2 workers for both species simultaneously)
-- Output: `02_networks.RData` (correlation matrices + thresholds)
+- Loads variance-stabilized expression matrix (vst_hog.RDS)
+- Filters to focal tissue (root or leaf)
+- Extracts ortholog mappings from hierarchical ortholog groups (N1_clean.RDS)
+- Creates species pair working directories
+- **Output**: Expression files + ortholog table per pair
 
-**RCOMPLEX_03**: Network comparison (conservation testing)
-- For each ortholog pair: Test if neighborhood co-expression is conserved
-- Method: Hypergeometric test on co-expressed neighbors
-- Bidirectional testing: Species1→Species2 AND Species2→Species1
-- FDR correction for multiple testing
-- Parallel across ortholog pairs
-- Output: `03_comparison.RData` (p-values + effect sizes)
+---
 
-**RCOMPLEX_04**: Summary statistics & visualization
-- Aggregate results into TSV format (per-gene, per-HOG stats)
-- Generate p-value correlation and effect size plots
-- Output: `04_summary_statistics.tsv` + PNG plots
+#### Step 1: LOAD_FILTER (Quality Control)
 
-**FIND_CLIQUES**: Clique detection (aggregated per tissue)
+**Purpose**: Validate data and filter to analyzable gene sets
 
-**Key Innovation**: Identifies multi-species cliques where ALL gene pairs are co-expressed
+- Loads expression matrices for both species
+- Filters orthologs to genes present in BOTH species' expression data
+- Removes genes with missing values or low expression
+- **Output**: `01_filtered_data.RData` (clean, aligned ortholog pairs)
 
-Algorithm:
-1. Load all pairwise comparison results for a tissue
-2. Extract conserved gene pairs (Max.p.val < 0.05)
-3. For each hierarchical orthogroup (HOG):
-   - Build undirected graph: nodes = genes, edges = conserved co-expression
-   - Find maximal cliques using `igraph::max_cliques()`
-   - Each clique represents genes that are ALL pairwise co-expressed
-4. Annotate cliques with species and life cycle information
-5. Classify as Annual, Perennial, or Mixed based on species composition
-6. Export stratified results
+---
 
-**Why Cliques?**
-- Handles many-to-many orthology naturally
-- Multiple cliques can exist per HOG (different co-expression modules)
-- Ensures ALL genes in a clique are mutually co-expressed
-- Example: If clique has 4 genes, all 6 possible pairs must be co-expressed (p < 0.05)
+#### Step 2: COMPUTE_NETWORKS (Co-Expression Discovery)
+
+**Purpose**: Build gene co-expression networks for each species
+
+**Method**:
+
+1. **Correlation calculation**: 
+   - Spearman correlation (default) - robust to outliers, detects monotonic relationships
+   - Computes all pairwise gene correlations (gene × gene matrix)
+
+2. **Mutual Rank normalization**:
+   - Ranks correlations bidirectionally: gene_i → gene_j AND gene_j → gene_i  
+   - Combines ranks: MR = √(rank_ij × rank_ji)
+   - **Why?** Reduces spurious correlations, makes strengths comparable across species
+
+3. **Density thresholding**:
+   - Keep top 3% of correlations (configurable)
+   - Creates sparse network of strongest co-expression
+   - Reduces noise and computational complexity
+
+**Parallelization**: 2 species computed simultaneously (24 cores total)
+
+**Output**: `02_networks.RData` (correlation matrices + thresholds)
+
+---
+
+#### Step 3: NETWORK_COMPARISON (Conservation Testing) ⭐ CORE INNOVATION
+
+**Purpose**: Test whether co-expression relationships are conserved between species
+
+**For each ortholog pair (geneA_sp1, geneB_sp2)**:
+
+1. **Extract co-expression neighborhoods**:
+   - Sp1_neighbors: All genes significantly co-expressed with geneA in Species 1
+   - Sp2_neighbors: All genes significantly co-expressed with geneB in Species 2
+
+2. **Test conservation bidirectionally**:
+   
+   **Direction 1 (Sp1 → Sp2)**:
+   - Question: "Do geneA's neighbors in Sp1 have orthologs that are geneB's neighbors in Sp2?"
+   - Count overlap of conserved co-expression relationships
+   - Hypergeometric test: P(overlap ≥ observed | random expectation)
+   
+   **Direction 2 (Sp2 → Sp1)**:
+   - Question: "Do geneB's neighbors in Sp2 have orthologs that are geneA's neighbors in Sp1?"
+   - Ensures bidirectional conservation (not just one-way)
+   - Use minimum p-value (most conservative estimate)
+
+3. **Statistical testing**:
+
+   ```text
+   Hypergeometric test: P(X ≥ k) where:
+     k = observed overlap of conserved co-expression
+     m = neighborhood size in species 1
+     n = non-neighbors in species 1  
+     k = neighborhood size in species 2
+   ```
+
+   - Tests if overlap is greater than random chance
+   - Accounts for network structure and gene set sizes
+
+4. **Multiple testing correction**:
+   - Benjamini-Hochberg FDR correction
+   - Controls false discovery rate at 5% (adjustable)
+   - Testing ~10,000 ortholog pairs requires stringent correction
+
+**Parallelization**: Processes ortholog pairs in parallel (24 cores)
+
+**Output**: `03_comparison.RData` (p-values, effect sizes, neighborhood statistics)
+
+---
+
+#### Step 4: SUMMARY_STATS (Aggregation & Visualization)
+
+**Purpose**: Aggregate conservation statistics and generate diagnostic plots
+
+- Computes per-gene conservation metrics (mean/median p-values)
+- Computes per-HOG statistics (family-level conservation)
+- Generates diagnostic visualizations:
+  - P-value correlation plot (bidirectional agreement)
+  - Effect size distribution (conservation signal strength)
+
+**Output**: `04_summary_statistics.tsv` + PNG plots
+
+---
+
+#### Step 5: FIND_CLIQUES (Complete Module Discovery) ⭐ KEY BIOLOGICAL OUTPUT
+
+**Purpose**: Identify multi-species gene cliques where ALL pairwise co-expression is conserved
+
+**Algorithm**:
+
+1. **Aggregate all pairwise comparisons** for tissue:
+   - Combine results from ALL species pair analyses
+   - Filter to significantly conserved pairs (p < 0.05 after FDR)
+
+2. **For each Hierarchical Ortholog Group (HOG)**:
+   
+   a. **Build graph**:
+      - Nodes = genes from all species in HOG
+      - Edges = conserved co-expression relationships
+   
+   b. **Find maximal cliques** using `igraph::max_cliques()`:
+      - **Clique** = complete subgraph where all nodes are connected to all others
+      - **Maximal** = cannot add more genes without losing completeness
+      - Example: 4-gene clique requires 6 conserved edges (all pairs)
+   
+   c. **Why cliques?**
+      - Handles many-to-many orthology (paralogs → separate cliques)
+      - Ensures COMPLETE coordination (not partial)
+      - Stronger functional evidence than pairwise connections
+      - Multiple cliques per HOG = different functional modules
+
+3. **Annotate cliques**:
+   - Species composition (which species represented)
+   - Life habit classification:
+     - **Annual**: All genes from annual species only
+     - **Perennial**: All genes from perennial species only  
+     - **Mixed**: Contains both annual and perennial genes
+   - Statistical properties (mean p-values, effect sizes, edge counts)
+
+4. **Export stratified results**:
+   - Separate files for annual, perennial, and mixed cliques
+   - Gene lists for downstream enrichment analysis
+
+**Output**: 
+
+- `coexpressolog_cliques_{tissue}_{habit}.tsv` (4 files: all, annual, perennial, shared)
+- `genes_{tissue}_{habit}.txt` (gene lists for GO/pathway enrichment)
+
+---
+
+### Why This Approach Works
+
+**Statistical Rigor**:
+
+- Hypergeometric test models drawing without replacement (appropriate for networks)
+- Bidirectional testing ensures mutual conservation
+- FDR correction controls false discoveries in large-scale testing
+
+**Biological Relevance**:
+
+- Cliques represent tightly coordinated gene modules
+- Conservation across species indicates functional importance
+- Life habit stratification reveals adaptation-specific networks
+- Tissue specificity captures organ-specialized regulation
+
+**Computational Efficiency**:
+
+- Parallelization across species pairs and ortholog pairs
+- Sparse networks reduce memory and computation
+- Nextflow enables resumable, scalable execution
 
 ## Data Requirements
 
