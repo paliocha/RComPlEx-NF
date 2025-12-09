@@ -24,6 +24,7 @@ report.html
 /tmp/
 RComPlEx_container/
 .apptainer_cache/
+.apptainer_tmp/
 .claude/
 nf-complex_*.out
 

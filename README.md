@@ -1,6 +1,6 @@
 # RComPlEx-NF: Comparative Analysis of Plant Co-Expression Networks in R
 
-**RComPlEx** is a Nextflow pipeline that identifies **conserved co-expressologs** - orthologous genes that maintain coordinated expression patterns across evolutionarily divergent species.
+**RComPlEx** is a Nextflow pipeline that identifies **conserved co-expressologs** which are orthologous genes that maintain coordinated expression patterns across evolutionarily divergent species.
 
 ## What Makes RComPlEx Different?
 
@@ -13,10 +13,10 @@ Unlike traditional comparative genomics approaches that focus on sequence conser
 
 ### The Clique Advantage
 
-RComPlEx finds **multi-species gene cliques** where **ALL** pairwise relationships are conserved:
+RComPlEx finds **multi-species gene cliques** where **all** pairwise relationships are conserved:
 
 - **Traditional approach**: "Gene A and Gene B are co-expressed in both species"
-- **RComPlEx cliques**: "Genes A, B, C, and D are ALL mutually co-expressed across all species" (6 pairwise relationships for 4 genes, all significant)
+- **RComPlEx cliques**: "Genes A, B, C, and D are all mutually co-expressed across all species" (6 pairwise relationships for 4 genes, all significant)
 
 This ensures discovery of **complete functional modules** with tight coordination, providing stronger evidence of conserved biological function than pairwise comparisons alone.
 
@@ -235,7 +235,7 @@ RComPlEx/
 
 ---
 
-#### Step 3: NETWORK_COMPARISON (Conservation Testing) ⭐ CORE INNOVATION
+#### Step 3: NETWORK_COMPARISON (Conservation Testing)
 
 **Purpose**: Test whether co-expression relationships are conserved between species
 
@@ -464,6 +464,6 @@ tail -50 logs/RComPlEx_JOBID_ARRAYID.out
 If you use this pipeline, please cite:
 
 - ComPlEx method: Netotea *et al.* (2014) *BMC Genomics*. doi:[10.1186/1471-2164-15-106](https://doi.org/10.1186/1471-2164-15-106)
-- R implementation: Torgeir R. Hvidsten
-- Nextflow pipeline & parallelization: Martin Paliocha
+- R implementation: [Torgeir R. Hvidsten](https://gitlab.com/hvidsten-lab/rcomplex)
+- Nextflow pipeline & parallelization: [Martin Paliocha](https://www.nmbu.no/en/about/employees/martin-paliocha)
 - Pipeline repository: [paliocha/RComPlEx-NF](https://github.com/paliocha/RComPlEx-NF)
