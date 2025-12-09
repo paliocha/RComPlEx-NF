@@ -8,6 +8,7 @@
 results/
 rcomplex_data/
 work/
+old/
 
 # Nextflow
 .nextflow/
