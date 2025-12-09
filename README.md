@@ -1,6 +1,6 @@
 # RComPlEx-NF: Comparative Analysis of Plant Co-Expression Networks in R
 
-**RComPlEx** (R Comparative Plant Expression Analysis) is a Nextflow pipeline that identifies **conserved co-expressologs** - orthologous genes that maintain coordinated expression patterns across evolutionarily divergent species.
+**RComPlEx** is a Nextflow pipeline that identifies **conserved co-expressologs** - orthologous genes that maintain coordinated expression patterns across evolutionarily divergent species.
 
 ## What Makes RComPlEx Different?
 

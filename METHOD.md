@@ -2,7 +2,7 @@
 
 ## Overview
 
-RComPlEx (Comparative analysis of plant co-expression networks in R) identifies **conserved co-expressed orthologs (co-expressologs)** across multiple species. Unlike simple orthology, this method finds genes that are not only orthologous but also **co-expressed in functionally similar networks** across species.
+RComPlEx identifies **conserved co-expressed orthologs (co-expressologs)** across multiple species. Unlike simple orthology, this method finds genes that are not only orthologous but also **co-expressed in functionally similar networks** across species.
 
 The key innovation is detecting multi-species **cliques** where all orthologous gene pairs show significant co-expression, ensuring functional conservation of entire gene modules.
 
