@@ -240,7 +240,7 @@ if (norm_method == "CLR") {
   # Species 1: Fast ranking + vectorized MR with Rfast
   cat("Ranking and computing MR for", species1_name, "...\n")
   R1 <- matrixStats::rowRanks(species1_net, ties.method = "average")
-  species1_net <- sqrt(Rfast::Tcrossprod(R1))
+  species1_net <- sqrt(Rfast::Tcrossprod(R1, R1))
   rownames(species1_net) <- species1_genes
   colnames(species1_net) <- species1_genes
   rm(R1)
@@ -249,7 +249,7 @@ if (norm_method == "CLR") {
   # Species 2: Fast ranking + vectorized MR with Rfast
   cat("Ranking and computing MR for", species2_name, "...\n")
   R2 <- matrixStats::rowRanks(species2_net, ties.method = "average")
-  species2_net <- sqrt(Rfast::Tcrossprod(R2))
+  species2_net <- sqrt(Rfast::Tcrossprod(R2, R2))
   rownames(species2_net) <- species2_genes
   colnames(species2_net) <- species2_genes
   rm(R2)
