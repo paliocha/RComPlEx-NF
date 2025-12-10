@@ -92,8 +92,10 @@ From: rocker/tidyverse:4.5.2
             'igraph',          # Network/graph analysis (core for RComPlEx)
             'gplots',          # Extended plotting functions
             'RColorBrewer',    # Color palettes
+            'conflicted',      # Manage function name conflicts
             'cowplot',         # Plot composition and alignment
             'DT',              # Interactive data tables
+            'data.table',      # Fast data manipulation
             'optparse',        # Command line argument parsing
             'yaml',            # YAML configuration file parsing
             'glue',            # String interpolation
@@ -177,7 +179,7 @@ From: rocker/tidyverse:4.5.2
     echo "Testing package installations..."
     R --slave -e "
         # Essential packages that MUST be present
-        essential <- c('tidyverse', 'igraph', 'furrr', 'future', 'gplots',
+        essential <- c('tidyverse', 'igraph', 'furrr', 'future', 'gplots', 'data.table',
                       'RColorBrewer', 'cowplot', 'DT', 'optparse', 'yaml', 'glue', 'matrixStats', 'Rfast')
 
         # Optional packages

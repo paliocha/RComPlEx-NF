@@ -212,17 +212,17 @@ if (norm_method == "CLR") {
   species1_genes <- rownames(species1_net)
   species2_genes <- rownames(species2_net)
 
+  # Species 1: Vectorized CLR with Rfast
   z <- scale(species1_net)
   z[z < 0] <- 0
-  species1_net <- sqrt(t(z)^2 + z^2)
-  # Restore gene names to normalized network
+  species1_net <- sqrt(Rfast::Tcrossprod(t(z)) + Rfast::Tcrossprod(z))
   rownames(species1_net) <- species1_genes
   colnames(species1_net) <- species1_genes
 
+  # Species 2: Vectorized CLR with Rfast
   z <- scale(species2_net)
   z[z < 0] <- 0
-  species2_net <- sqrt(t(z)^2 + z^2)
-  # Restore gene names to normalized network
+  species2_net <- sqrt(Rfast::Tcrossprod(t(z)) + Rfast::Tcrossprod(z))
   rownames(species2_net) <- species2_genes
   colnames(species2_net) <- species2_genes
 
@@ -230,41 +230,29 @@ if (norm_method == "CLR") {
   cat("✓ CLR normalization completed in", round(norm_elapsed, 1), "seconds\n\n")
 
 } else if (norm_method == "MR") {
-  cat("\nApplying Mutual Rank (MR) normalization in parallel...\n")
-  cat("Using", n_cores, "cores for row-wise ranking\n\n")
+  cat("\nApplying Mutual Rank (MR) normalization with Rfast...\n")
   norm_start <- Sys.time()
 
   # Preserve gene names before MR normalization (matrices lose dimnames during computation)
   species1_genes <- rownames(species1_net)
   species2_genes <- rownames(species2_net)
 
-  # Set up parallel processing for MR normalization
-  plan(multisession, workers = n_cores)
-
-  # Parallel ranking for species 1
-  cat("Ranking", species1_name, "network rows...\n")
-  R1_list <- future_map(1:nrow(species1_net), function(i) {
-    rank(species1_net[i, ])
-  }, .options = furrr_options(seed = TRUE), .progress = TRUE)
-  R1 <- do.call(rbind, R1_list)
-  species1_net <- sqrt(R1 * t(R1))
-  # Restore gene names to normalized network
+  # Species 1: Fast ranking + vectorized MR with Rfast
+  cat("Ranking and computing MR for", species1_name, "...\n")
+  R1 <- matrixStats::rowRanks(species1_net, ties.method = "average")
+  species1_net <- sqrt(Rfast::Tcrossprod(R1))
   rownames(species1_net) <- species1_genes
   colnames(species1_net) <- species1_genes
-  rm(R1, R1_list)
+  rm(R1)
   gc(verbose = FALSE)
 
-  # Parallel ranking for species 2
-  cat("Ranking", species2_name, "network rows...\n")
-  R2_list <- future_map(1:nrow(species2_net), function(i) {
-    rank(species2_net[i, ])
-  }, .options = furrr_options(seed = TRUE), .progress = TRUE)
-  R2 <- do.call(rbind, R2_list)
-  species2_net <- sqrt(R2 * t(R2))
-  # Restore gene names to normalized network
+  # Species 2: Fast ranking + vectorized MR with Rfast
+  cat("Ranking and computing MR for", species2_name, "...\n")
+  R2 <- matrixStats::rowRanks(species2_net, ties.method = "average")
+  species2_net <- sqrt(Rfast::Tcrossprod(R2))
   rownames(species2_net) <- species2_genes
   colnames(species2_net) <- species2_genes
-  rm(R2, R2_list)
+  rm(R2)
   gc(verbose = FALSE)
 
   norm_elapsed <- as.numeric(difftime(Sys.time(), norm_start, units = "secs"))

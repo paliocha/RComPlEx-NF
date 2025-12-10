@@ -511,7 +511,7 @@ workflow.onComplete {
     
     // Write detailed summary to file
     def summaryFile = new File("${params.outdir}/pipeline_info.txt")
-    summaryFile.mkdirs()
+    summaryFile.parentFile.mkdirs()
     summaryFile.text = summary.collect { k, v -> "${k.padRight(20)}: $v" }.join('\n')
 }
 
