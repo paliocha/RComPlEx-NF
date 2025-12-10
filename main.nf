@@ -23,14 +23,56 @@ params.tissues = ['root', 'leaf']  // Override with --tissues root to run single
 params.outdir = "${project_base}/results"
 params.test_mode = false  // Set to true to run only 3 pairs per tissue
 params.container = "${project_base}/RComPlEx.sif"
+params.help = false
+
+// Help message
+def helpMessage() {
+    log.info"""
+    ═══════════════════════════════════════════════════════════════
+    RComPlEx Pipeline - Comparative Co-expression Network Analysis
+    ═══════════════════════════════════════════════════════════════
+    
+    Usage:
+        nextflow run main.nf [options]
+    
+    Required:
+        None (uses defaults from config/pipeline_config.yaml)
+    
+    Optional:
+        --tissues <tissue>     Tissues to analyze [default: root,leaf]
+                               Use --tissues root or --tissues leaf for single tissue
+        --test_mode            Run with first 3 pairs only [default: false]
+        --outdir <path>        Output directory [default: results/]
+        --config <path>        Config file [default: config/pipeline_config.yaml]
+        --help                 Show this message and exit
+    
+    Profiles:
+        -profile slurm         SLURM executor (default)
+        -profile standard      Local executor
+        -profile test          Test mode with limited pairs
+    
+    Example:
+        nextflow run main.nf -profile slurm --tissues root
+        nextflow run main.nf -profile test
+        nextflow run main.nf -resume  # Resume from cached steps
+    
+    ═══════════════════════════════════════════════════════════════
+    """.stripIndent()
+}
+
+if (params.help) {
+    helpMessage()
+    exit 0
+}
 
 // ============================================================================
 // Process Definitions
 // ============================================================================
 
 process PREPARE_PAIR {
+    label 'low_mem'
     tag "${tissue}:${sp1}_${sp2}"
-    publishDir "${params.workdir}/rcomplex_data/${tissue}/pairs/${sp1}_${sp2}", mode: 'copy'
+    publishDir "${params.workdir}/rcomplex_data/${tissue}/pairs/${sp1}_${sp2}", mode: 'symlink'
     container params.container
 
     cpus 2
@@ -66,6 +108,7 @@ process PREPARE_PAIR {
 }
 
 process RCOMPLEX_01_LOAD_FILTER {
+    label 'low_mem'
     tag "${tissue}:${pair_id}"
     container params.container
 
@@ -98,11 +141,12 @@ process RCOMPLEX_01_LOAD_FILTER {
 }
 
 process RCOMPLEX_02_COMPUTE_NETWORKS {
+    label 'high_mem'
     tag "${tissue}:${pair_id}"
     container params.container
 
-    cpus 24
-    memory '280 GB'
+    cpus 2
+    memory '300 GB'
     time '4h'
 
     input:
@@ -132,11 +176,12 @@ process RCOMPLEX_02_COMPUTE_NETWORKS {
 }
 
 process RCOMPLEX_03_NETWORK_COMPARISON {
+    label 'high_mem'
     tag "${tissue}:${pair_id}"
     container params.container
 
-    cpus 24
-    memory '280 GB'
+    cpus 2
+    memory '500 GB'
     time '4h'
 
     input:
@@ -166,9 +211,10 @@ process RCOMPLEX_03_NETWORK_COMPARISON {
 }
 
 process RCOMPLEX_04_SUMMARY_STATS {
+    label 'low_mem'
     tag "${tissue}:${pair_id}"
     container params.container
-    publishDir "${params.workdir}/rcomplex_data/${tissue}/results/${pair_id}", mode: 'copy'
+    publishDir "${params.workdir}/rcomplex_data/${tissue}/results/${pair_id}", mode: 'symlink'
 
     cpus 2
     memory '8 GB'
@@ -200,9 +246,10 @@ process RCOMPLEX_04_SUMMARY_STATS {
 }
 
 process FIND_CLIQUES {
+    label 'very_high_mem'
     tag "${tissue}"
     container params.container
-    publishDir "${params.outdir}/${tissue}", mode: 'copy'
+    publishDir "${params.outdir}/${tissue}", mode: 'move'
 
     cpus 12
     memory '220 GB'
@@ -265,8 +312,9 @@ process FIND_CLIQUES {
 }
 
 process SUMMARY_REPORT {
+    label 'medium_mem'
     tag "report"
-    publishDir "${params.outdir}", mode: 'copy'
+    publishDir "${params.outdir}", mode: 'move'
 
     cpus 4
     memory '16 GB'
@@ -432,6 +480,22 @@ workflow {
 // ============================================================================
 
 workflow.onComplete {
+    def summary = [:]
+    summary['Pipeline'] = workflow.manifest.name
+    summary['Version'] = workflow.manifest.version
+    summary['Run Name'] = workflow.runName
+    summary['Session ID'] = workflow.sessionId
+    summary['Success'] = workflow.success
+    summary['Exit status'] = workflow.exitStatus
+    summary['Started'] = workflow.start
+    summary['Completed'] = workflow.complete
+    summary['Duration'] = workflow.duration
+    summary['CPU hours'] = workflow.stats.getComputeTimeFmt()
+    summary['Results'] = params.outdir
+    summary['Work dir'] = workflow.workDir
+    summary['Profile'] = workflow.profile
+    summary['Container'] = params.container
+    
     log.info """
     ══════════════════════════════════════════════════════════════
     Pipeline completed!
@@ -439,10 +503,16 @@ workflow.onComplete {
     Started   : ${workflow.start}
     Completed : ${workflow.complete}
     Duration  : ${workflow.duration}
+    CPU hours : ${workflow.stats.getComputeTimeFmt()}
 
     Results   : ${params.outdir}
     ══════════════════════════════════════════════════════════════
     """.stripIndent()
+    
+    // Write detailed summary to file
+    def summaryFile = new File("${params.outdir}/pipeline_info.txt")
+    summaryFile.mkdirs()
+    summaryFile.text = summary.collect { k, v -> "${k.padRight(20)}: $v" }.join('\n')
 }
 
 workflow.onError {
