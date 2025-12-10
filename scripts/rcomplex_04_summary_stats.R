@@ -12,9 +12,6 @@ suppressPackageStartupMessages({
   library(ggplot2)
 })
 
-# Source Orion HPC utilities for path resolution
-source("R/orion_hpc_utils.R")
-
 # Parse command-line arguments
 option_list <- list(
   make_option(c("-t", "--tissue"), type = "character", default = NULL,
@@ -31,6 +28,9 @@ option_list <- list(
 
 opt_parser <- OptionParser(option_list = option_list)
 opt <- parse_args(opt_parser)
+
+# Source Orion HPC utilities for path resolution using provided workdir
+source(file.path(opt$workdir, "R", "orion_hpc_utils.R"))
 
 # Resolve Orion HPC paths
 opt$workdir <- resolve_orion_path(opt$workdir)
@@ -61,7 +61,7 @@ dir.create(opt$outdir, showWarnings = FALSE, recursive = TRUE)
 # LOAD COMPARISON DATA FROM STEP 3
 # ==============================================================================
 
-input_file <- file.path(opt$indir, "03_comparison.RData")
+input_file <- file.path(opt$indir, paste0("03_", opt$pair_id, ".RData"))
 if (!file.exists(input_file)) {
   stop("Step 3 output not found: ", input_file)
 }
