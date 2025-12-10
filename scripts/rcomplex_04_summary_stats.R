@@ -29,10 +29,22 @@ option_list <- list(
 opt_parser <- OptionParser(option_list = option_list)
 opt <- parse_args(opt_parser)
 
-# Source Orion HPC utilities for path resolution using provided workdir
-source(file.path(opt$workdir, "R", "orion_hpc_utils.R"))
+# Source Orion HPC utilities with fallback across mounts, then resolve paths
+orion_utils_candidates <- c(
+  file.path(opt$workdir, "R", "orion_hpc_utils.R"),
+  "R/orion_hpc_utils.R",
+  file.path(Sys.getenv("PROJECT_DIR", ""), "R", "orion_hpc_utils.R"),
+  file.path(Sys.getenv("HOME", ""), "AnnualPerennial/RComPlEx/R/orion_hpc_utils.R"),
+  "/opt/rcomplex/R/orion_hpc_utils.R"
+)
+orion_utils_path <- orion_utils_candidates[file.exists(orion_utils_candidates)][1]
+if (is.na(orion_utils_path)) {
+  stop("Cannot locate R/orion_hpc_utils.R; checked: ",
+       paste(orion_utils_candidates, collapse = ", "))
+}
+source(orion_utils_path)
 
-# Resolve Orion HPC paths
+# Resolve Orion HPC paths now that helper is loaded
 opt$workdir <- resolve_orion_path(opt$workdir)
 opt$indir <- resolve_orion_path(opt$indir)
 opt$outdir <- resolve_orion_path(opt$outdir)
