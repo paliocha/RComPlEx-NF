@@ -162,12 +162,11 @@ plan(multisession, workers = n_cores)
 N1 <- nrow(species1_expr)
 N2 <- nrow(species2_expr)
 
-cat("Processing", nrow(ortho), "ortholog pairs using", n_cores, "cores\n")
-cat("(Progress bar will update as chunks complete)\n\n")
+cat("Processing", nrow(ortho), "ortholog pairs using", n_cores, "cores\n\n")
 
 # PARALLEL NETWORK COMPARISON LOOP
 # ================================
-# Suppress furrr serialization warnings (lubridate/dplyr package availability)
+# Suppress warnings and disable progress bar (progress to stderr causes Nextflow issues)
 comparison <- suppressWarnings({
   ortho %>%
     mutate(row_id = row_number()) %>%
@@ -235,7 +234,7 @@ comparison <- suppressWarnings({
       Species2.effect.size = effect_size_2
     )
 
-  }, .progress = TRUE, .options = furrr_options(seed = TRUE))
+  }, .progress = FALSE, .options = furrr_options(seed = TRUE))
 })
 
 comparison_elapsed <- as.numeric(difftime(Sys.time(), comparison_start, units = "mins"))
