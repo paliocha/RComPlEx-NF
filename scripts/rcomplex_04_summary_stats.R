@@ -233,7 +233,7 @@ plot_data <- data.frame(
   s2 = -log10(comparison$Species2.p.val + 1e-100)
 )
 
-R <- cor.test(plot_data$s1, plot_data$s2, method = "spearman", continuity = TRUE)
+R <- cor.test(plot_data$s1, plot_data$s2, method = "spearman", continuity = TRUE, exact = FALSE)
 
 p1 <- ggplot(plot_data, aes(x = s1, y = s2)) +
   geom_point(alpha = 0.5) +
