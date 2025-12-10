@@ -295,7 +295,7 @@ RComPlEx/
 
 ---
 
-#### Step 5: FIND_CLIQUES (Complete Module Discovery) ⭐ KEY BIOLOGICAL OUTPUT
+#### Step 5: FIND_CLIQUES (Complete Module Discovery)
 
 **Purpose**: Identify multi-species gene cliques where ALL pairwise co-expression is conserved
 
