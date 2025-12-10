@@ -1,5 +1,5 @@
 Bootstrap: docker
-From: rocker/tidyverse:4.4.2
+From: rocker/tidyverse:4.5.2
 
 %files
     scripts /opt/rcomplex/scripts
@@ -8,9 +8,9 @@ From: rocker/tidyverse:4.4.2
 %labels
     Author "Martin Paliocha & Torgeir Rhodén Hvidsten"
     Version "1.0.0"
-    Description "RComPlEx: Co-expressolog discovery across annual and perennial species"
+    Description "RComPlEx: Comparative analysis of plant co-expression networks in R"
     HPC "Apptainer 1.4.5+"
-    RVersion "4.4.2"
+    RVersion "4.5.2"
 
 %help
     RComPlEx Container for co-expression network analysis
@@ -19,7 +19,7 @@ From: rocker/tidyverse:4.4.2
       apptainer exec RComPlEx.sif Rscript script.R [options]
 
     Features:
-      - R 4.4.2 with tidyverse ecosystem
+      - R 4.5.2 with tidyverse ecosystem
       - Network analysis: igraph, WGCNA
       - Parallel processing: furrr, future
       - Data processing: yaml, optparse, glue
@@ -28,9 +28,9 @@ From: rocker/tidyverse:4.4.2
 
     Installed Packages:
       - tidyverse, igraph, WGCNA, furrr, future, gplots, RColorBrewer
-      - cowplot, DT, matrixStats, optparse, yaml, glue
+      - cowplot, DT, matrixStats, Rfast, optparse, yaml, glue
 
-    Contact: martin.paliocha@iku.glu.se
+    Contact: martin.paliocha@nmbu.no
 
 %environment
     # Set R_HOME explicitly to avoid RStudio conflicts
@@ -97,7 +97,8 @@ From: rocker/tidyverse:4.4.2
             'optparse',        # Command line argument parsing
             'yaml',            # YAML configuration file parsing
             'glue',            # String interpolation
-            'matrixStats'      # Fast matrix functions
+            'matrixStats',     # Fast matrix functions
+            'Rfast'            # High-performance computations (Tcrossprod)
         )
 
         # Optional/large packages that may require additional dependencies
@@ -177,7 +178,7 @@ From: rocker/tidyverse:4.4.2
     R --slave -e "
         # Essential packages that MUST be present
         essential <- c('tidyverse', 'igraph', 'furrr', 'future', 'gplots',
-                      'RColorBrewer', 'cowplot', 'DT', 'optparse', 'yaml', 'glue')
+                      'RColorBrewer', 'cowplot', 'DT', 'optparse', 'yaml', 'glue', 'matrixStats', 'Rfast')
 
         # Optional packages
         optional <- c('WGCNA')
