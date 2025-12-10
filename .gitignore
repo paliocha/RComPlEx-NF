@@ -26,6 +26,8 @@ RComPlEx_container/
 .apptainer_cache/
 .apptainer_tmp/
 .claude/
+.micromamba/
+.conda/
 nf-complex_*.out
 
 # Environment and configuration (with secrets)
