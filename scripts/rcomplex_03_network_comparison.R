@@ -264,7 +264,7 @@ cat("    -", species2_name, "genes:", length(unique(comparison$Species2)), "\n\n
 # SAVE RESULTS
 # ==============================================================================
 
-output_file <- file.path(opt$outdir, "03_comparison.RData")
+output_file <- file.path(opt$outdir, paste0("03_", opt$pair_id, ".RData"))
 cat("Saving comparison results to:", output_file, "\n")
 save(comparison, species1_thr, species2_thr,
      species1_name, species2_name,
