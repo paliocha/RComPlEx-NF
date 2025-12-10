@@ -167,10 +167,12 @@ cat("(Progress bar will update as chunks complete)\n\n")
 
 # PARALLEL NETWORK COMPARISON LOOP
 # ================================
-comparison <- ortho %>%
-  mutate(row_id = row_number()) %>%
-  group_split(row_id) %>%
-  future_map_dfr(function(row_data) {
+# Suppress furrr serialization warnings (lubridate/dplyr package availability)
+comparison <- suppressWarnings({
+  ortho %>%
+    mutate(row_id = row_number()) %>%
+    group_split(row_id) %>%
+    future_map_dfr(function(row_data) {
 
     i <- row_data$row_id
 
@@ -234,6 +236,7 @@ comparison <- ortho %>%
     )
 
   }, .progress = TRUE, .options = furrr_options(seed = TRUE))
+})
 
 comparison_elapsed <- as.numeric(difftime(Sys.time(), comparison_start, units = "mins"))
 cat("\n✓ Network comparison completed in", round(comparison_elapsed, 2), "minutes\n")
