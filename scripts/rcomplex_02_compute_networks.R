@@ -208,13 +208,23 @@ if (norm_method == "CLR") {
   cat("\nApplying CLR (Centered Log Ratio) normalization...\n")
   norm_start <- Sys.time()
 
+  # Preserve gene names before CLR normalization
+  species1_genes <- rownames(species1_net)
+  species2_genes <- rownames(species2_net)
+
   z <- scale(species1_net)
   z[z < 0] <- 0
   species1_net <- sqrt(t(z)^2 + z^2)
+  # Restore gene names to normalized network
+  rownames(species1_net) <- species1_genes
+  colnames(species1_net) <- species1_genes
 
   z <- scale(species2_net)
   z[z < 0] <- 0
   species2_net <- sqrt(t(z)^2 + z^2)
+  # Restore gene names to normalized network
+  rownames(species2_net) <- species2_genes
+  colnames(species2_net) <- species2_genes
 
   norm_elapsed <- as.numeric(difftime(Sys.time(), norm_start, units = "secs"))
   cat("✓ CLR normalization completed in", round(norm_elapsed, 1), "seconds\n\n")
@@ -223,6 +233,10 @@ if (norm_method == "CLR") {
   cat("\nApplying Mutual Rank (MR) normalization in parallel...\n")
   cat("Using", n_cores, "cores for row-wise ranking\n\n")
   norm_start <- Sys.time()
+
+  # Preserve gene names before MR normalization (matrices lose dimnames during computation)
+  species1_genes <- rownames(species1_net)
+  species2_genes <- rownames(species2_net)
 
   # Set up parallel processing for MR normalization
   plan(multisession, workers = n_cores)
@@ -234,6 +248,9 @@ if (norm_method == "CLR") {
   }, .options = furrr_options(seed = TRUE), .progress = TRUE)
   R1 <- do.call(rbind, R1_list)
   species1_net <- sqrt(R1 * t(R1))
+  # Restore gene names to normalized network
+  rownames(species1_net) <- species1_genes
+  colnames(species1_net) <- species1_genes
   rm(R1, R1_list)
   gc(verbose = FALSE)
 
@@ -244,6 +261,9 @@ if (norm_method == "CLR") {
   }, .options = furrr_options(seed = TRUE), .progress = TRUE)
   R2 <- do.call(rbind, R2_list)
   species2_net <- sqrt(R2 * t(R2))
+  # Restore gene names to normalized network
+  rownames(species2_net) <- species2_genes
+  colnames(species2_net) <- species2_genes
   rm(R2, R2_list)
   gc(verbose = FALSE)
 
