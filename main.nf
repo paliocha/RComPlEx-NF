@@ -109,7 +109,7 @@ process RCOMPLEX_02_COMPUTE_NETWORKS {
     tuple val(tissue), val(pair_id), path(filtered_data)
 
     output:
-    tuple val(tissue), val(pair_id), path("02_networks.RData"), emit: networks
+    tuple val(tissue), val(pair_id), path(filtered_data), path("02_networks.RData"), emit: networks
 
     script:
     """
@@ -140,7 +140,7 @@ process RCOMPLEX_03_NETWORK_COMPARISON {
     time '4h'
 
     input:
-    tuple val(tissue), val(pair_id), path(networks)
+    tuple val(tissue), val(pair_id), path(filtered_data), path(networks)
 
     output:
     tuple val(tissue), val(pair_id), path("03_${pair_id}.RData"), emit: comparison
