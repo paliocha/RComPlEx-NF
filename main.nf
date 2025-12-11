@@ -375,7 +375,7 @@ workflow {
         def validate_script = "${projectDir}/scripts/validate_inputs.R"
         def config_file = "${params.config}"
         def cmd = ['/bin/bash', '-c', "source ~/.bashrc && module load R/4.4.2 && Rscript ${validate_script} --config ${config_file} --workdir ${params.workdir}"]
-        def proc = cmd.execute(null, new File(projectDir))
+        def proc = cmd.execute(null, new File(projectDir.toString()))
         def output = new StringBuilder()
         def error = new StringBuilder()
         proc.waitForProcessOutput(output, error)
@@ -487,7 +487,8 @@ workflow.onComplete {
     """.stripIndent()
     
     // Write detailed summary to file
-    def summaryFile = new File("${params.outdir}/pipeline_info.txt")
+    def outDirPath = params.outdir.toString()
+    def summaryFile = new File("${outDirPath}/pipeline_info.txt")
     summaryFile.parentFile.mkdirs()
     summaryFile.text = summary.collect { k, v -> "${k.padRight(20)}: $v" }.join('\n')
 }
