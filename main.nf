@@ -377,13 +377,13 @@ workflow {
         def cmd = ['/bin/bash', '-c', "source ~/.bashrc && module load R/4.4.2 && Rscript ${validate_script} --config ${config_file} --workdir ${params.workdir}"]
         def proc = cmd.execute(null, new File(projectDir.toString()))
         def output = new StringBuilder()
-        def error = new StringBuilder()
-        proc.waitForProcessOutput(output, error)
+        def errorOutput = new StringBuilder()
+        proc.waitForProcessOutput(output, errorOutput)
         if (proc.exitValue() != 0) {
             System.err.println "VALIDATION ERROR:"
             System.err.println output.toString()
-            System.err.println error.toString()
-            error("Input validation failed")
+            System.err.println errorOutput.toString()
+            throw new Exception("Input validation failed")
         }
         println output.toString()
         true
@@ -488,9 +488,15 @@ workflow.onComplete {
     
     // Write detailed summary to file
     def outDirPath = params.outdir.toString()
-    def summaryFile = new File("${outDirPath}/pipeline_info.txt")
-    summaryFile.parentFile.mkdirs()
-    summaryFile.text = summary.collect { k, v -> "${k.padRight(20)}: $v" }.join('\n')
+    def summaryFilePath = new File("${outDirPath}/pipeline_summary.txt")
+    summaryFilePath.parentFile.mkdirs()
+    
+    // Delete if exists as directory (edge case)
+    if (summaryFilePath.exists() && summaryFilePath.isDirectory()) {
+        summaryFilePath.deleteDir()
+    }
+    
+    summaryFilePath.text = summary.collect { k, v -> "${k.padRight(20)}: $v" }.join('\n')
 }
 
 workflow.onError {
