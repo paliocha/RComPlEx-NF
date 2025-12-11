@@ -69,61 +69,48 @@ Tissue-specific cliques reveal organ-specialized regulatory networks.
 
 ## Quick Start
 
-### 1. Build Container (One-Time Setup)
+### Run Pipeline
 
 ```bash
-# Start interactive session on login node with persistent tmux
-qlogin
-tmux new-session -s rcomplex_build
+# Test with 3 pairs per tissue (15-30 min - recommended first!)
+nextflow run main.nf -profile slurm --test_mode true
 
-# Navigate and activate environment
-cd /net/fs-2/scale/OrionStore/Home/martpali/AnnualPerennial/RComPlEx
-source ~/.bashrc
-eval "$(micromamba shell hook --shell bash)"
-micromamba activate Nextflow
+# Full pipeline - all tissues (2-3 hours)
+nextflow run main.nf -profile slurm
 
-# Build container (15-30 minutes, builds in /tmp)
-bash apptainer/build_container.sh
+# Single tissue only
+nextflow run main.nf -profile slurm --tissues root
+
+# Resume from interruption
+nextflow run main.nf -profile slurm -resume
 ```
 
-After build completes, verify: `ls -lh RComPlEx.sif` (should be ~1-1.5 GB)
+### Directory Configuration
 
-### 2. Run Pipeline
+Default paths (edit `nextflow.config` to change):
+- Working directory: `/mnt/users/martpali/AnnualPerennial/RComPlEx`
+- Output directory: `/mnt/users/martpali/AnnualPerennial/RComPlEx/results`
+- Nextflow work: `/mnt/users/martpali/AnnualPerennial/RComPlEx/work`
 
+Override at runtime:
 ```bash
-# Test with 3 pairs per tissue (quick validation)
-nextflow run main.nf --tissues root --test_mode true
-
-# Full pipeline - all tissues
-nextflow run main.nf
-
-# Submit to SLURM with container
-sbatch slurm/run_nextflow.sh "slurm,singularity_hpc" "" false
-```
-
-## Advanced Usage
-
-Submit via SLURM with specific parameters:
-
-```bash
-# Run only root tissue
-sbatch slurm/run_nextflow.sh slurm root false
-
-# Test mode with 3 pairs per tissue
-sbatch slurm/run_nextflow.sh slurm "" true
-
-# Run with Apptainer container
-sbatch slurm/run_nextflow.sh "slurm,singularity_hpc" "" false
+nextflow run main.nf -profile slurm \
+  --workdir /custom/path \
+  --outdir /custom/results \
+  -w /custom/work
 ```
 
 ## Configuration
 
 Edit `config/pipeline_config.yaml` to customize:
+- Species lists (annual vs perennial)
+- Tissues to analyze
+- RComPlEx parameters (correlation method, network density, p-value threshold)
 
-- **Species lists**: Annual and perennial species
-- **Tissues**: Which tissues to analyze
-- **RComPlEx parameters**: Correlation method, network density, p-value threshold
-- **Resource allocation**: CPUs, memory, time limits
+Edit `nextflow.config` for:
+- Resource allocation (CPUs, memory, time limits)
+- Directory paths
+- SLURM settings
 
 ## Output Files
 
@@ -394,70 +381,40 @@ RComPlEx/
 - Nassella pubiflora
 - Oloptum miliaceum
 
-## Computational Requirements
+## Performance
 
-### Per RComPlEx Job
-- CPUs: 24
-- Memory: 200 GB
-- Time: Up to 7 days
-- Typical runtime: 30-60 minutes per pair
+### Optimized for NMBU Orion HPC:
+- **Test mode**: 15-30 minutes (3 pairs per tissue)
+- **Full pipeline**: 2-3 hours (both tissues, 78 pairs each)
+- **Parallel execution**: ~10 jobs simultaneously
+- **Resources per job**: 24 CPUs, 200-400 GB RAM (adaptive)
 
-### Clique Detection
-- CPUs: 12
-- Memory: 220 GB
-- Time: Up to 2 days
-- Typical runtime: 2-4 hours
-
-### Total Pipeline
-- 78 pairwise comparisons per tissue
-- 2 tissues = 156 total comparisons
-- With 20 concurrent jobs: ~4-6 hours wall time per tissue
+### Disk Space Requirements:
+- Intermediate files: 10-50 GB
+- Final results: 1-5 GB
+- Nextflow work: 50-200 GB (can be cleaned after successful run)
 
 ## Troubleshooting
 
-### Container Build Issues
-
+### Check Pipeline Progress
 ```bash
-# Verify container exists
-test -f RComPlEx.sif && echo "✓ Container ready" || echo "✗ Not built"
+# Watch SLURM queue
+watch -n 10 'squeue -u $USER'
 
-# Check container size
-du -sh RComPlEx.sif  # Should be ~1-1.5 GB
+# View logs
+tail -f .nextflow.log
 
-# Test container packages
-apptainer exec RComPlEx.sif R --slave -e "
-  pkgs <- c('igraph', 'furrr', 'future', 'yaml', 'optparse', 'glue')
-  for (p in pkgs) cat(p, ':', require(p, quietly=TRUE), '\n')
-"
+# Check disk space
+df -h /mnt/users/martpali/AnnualPerennial/
 ```
 
-### Jobs Failing with Memory Errors
+### Common Issues
 
-Increase memory in `config/pipeline_config.yaml`:
+**No cliques found**: Check p-value threshold in `config/pipeline_config.yaml` (default: 0.05)
 
-```yaml
-resources:
-  rcomplex:
-    memory: "250GB"  # Increase from 200GB
-```
+**Memory errors**: Pipeline automatically retries with increased memory (200 GB → 400 GB)
 
-### Missing Comparison Files
-
-Check SLURM logs in `logs/` directory:
-
-```bash
-# Find failed jobs
-grep -l "failed" logs/RComPlEx_*.err
-
-# Check specific job log
-tail -50 logs/RComPlEx_JOBID_ARRAYID.out
-```
-
-### No Cliques Found
-
-- Check p-value threshold in config (default: 0.05)
-- Verify RComPlEx analyses completed successfully
-- Check that comparison files exist: `find rcomplex_data/*/results -name "comparison-*.RData"`
+**Jobs stuck in queue**: Check SLURM partition limits with `scontrol show partition orion`
 
 ## Citation
 

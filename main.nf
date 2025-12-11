@@ -474,8 +474,10 @@ workflow {
 }
 
 // ============================================================================
-// Workflow Completion Handlers
-// Note: These are valid DSL2 constructs, but may trigger lint warnings
+// Workflow Event Handlers (Top-Level Scope)
+// NOTE: workflow.onComplete and workflow.onError MUST be defined at top level
+// These are global event handlers, not workflow statements - see Nextflow docs
+// The linter incorrectly flags these, but they are valid and required DSL2
 // ============================================================================
 
 workflow.onComplete {
