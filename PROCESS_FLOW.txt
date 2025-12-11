@@ -34,7 +34,8 @@ For each tissue (root, leaf):
   │
   ├─→ PREPARE_PAIR (parallelized for each species pair)
   │     ├─ Script: scripts/prepare_single_pair.R
-  │     ├─ CPUs: 2 | Memory: 8 GB | Time: 15m
+  │     ├─ CPUs: 2 | Memory: 8 GB | Time: 15m | MaxForks: 20
+  │     ├─ Label: low_mem
   │     ├─ Input: vst_hog.RDS (expression), N1_clean.RDS (orthologs)
   │     ├─ Actions:
   │     │   - Extract tissue-specific expression data for species pair
@@ -49,7 +50,9 @@ For each species pair within each tissue (PARALLEL PROCESSING):
   │
   ├─→ RCOMPLEX_01_LOAD_FILTER
   │     ├─ Script: scripts/rcomplex_01_load_filter.R
-  │     ├─ CPUs: 2 | Memory: 8 GB | Time: 30m
+  │     ├─ CPUs: 2 | Memory: 8 GB | Time: 15m | MaxForks: 20
+  │     ├─ Label: low_mem
+  │     ├─ Container: RComPlEx.sif (R 4.5.2 + tidyverse + igraph)
   │     ├─ Input: Data from PREPARE_PAIR
   │     ├─ Output: 01_filtered_data.RData
   │     ├─ Biological Purpose:
@@ -64,7 +67,11 @@ For each species pair within each tissue (PARALLEL PROCESSING):
   │
   ├─→ RCOMPLEX_02_COMPUTE_NETWORKS (CHAINED INPUT)
   │     ├─ Script: scripts/rcomplex_02_compute_networks.R
-  │     ├─ CPUs: 24 | Memory: 280 GB | Time: 4h
+  │     ├─ CPUs: 24 (retry: 48) | Memory: 200 GB (retry: 400 GB) | Time: 24h
+  │     ├─ MaxForks: 10 | MaxRetries: 2
+  │     ├─ Label: Dynamically allocated (high compute)
+  │     ├─ Container: RComPlEx.sif (R 4.5.2 + Rfast for fast correlation)
+  │     ├─ Error Strategy: Retry on OOM (exit 137)
   │     ├─ Input: 01_filtered_data.RData
   │     ├─ Output: 02_networks.RData
   │     ├─ Biological Purpose:
@@ -90,7 +97,11 @@ For each species pair within each tissue (PARALLEL PROCESSING):
   │
   ├─→ RCOMPLEX_03_NETWORK_COMPARISON (CHAINED INPUT) **CORE INNOVATION**
   │     ├─ Script: scripts/rcomplex_03_network_comparison.R
-  │     ├─ CPUs: 24 | Memory: 280 GB | Time: 4h
+  │     ├─ CPUs: 12 (retry: 24) | Memory: 150 GB (retry: 300 GB) | Time: 24h
+  │     ├─ MaxForks: 10 | MaxRetries: 2
+  │     ├─ Label: Dynamically allocated (high compute)
+  │     ├─ Container: RComPlEx.sif (R 4.5.2 + furrr for parallel processing)
+  │     ├─ Error Strategy: Retry on OOM (exit 137)
   │     ├─ Input: 01_filtered_data.RData + 02_networks.RData
   │     ├─ Output: 03_comparison.RData (03_{pair_id}.RData)
   │     ├─ Biological Purpose:
@@ -140,7 +151,9 @@ For each species pair within each tissue (PARALLEL PROCESSING):
   │
   └─→ RCOMPLEX_04_SUMMARY_STATS (CHAINED INPUT)
         ├─ Script: scripts/rcomplex_04_summary_stats.R
-        ├─ CPUs: 2 | Memory: 8 GB | Time: 30m
+        ├─ CPUs: 4 | Memory: 16 GB | Time: 1h | MaxForks: 15
+        ├─ Label: medium_mem
+        ├─ Container: RComPlEx.sif (R 4.5.2 + ggplot2 for visualization)
         ├─ Input: 03_comparison.RData (03_{pair_id}.RData)
         ├─ Output: 04_summary_statistics.tsv + PNG plots
         ├─ Biological Purpose:
@@ -166,7 +179,9 @@ After all species pairs complete for each tissue (SYNCHRONIZATION POINT):
   │
   ├─→ FIND_CLIQUES **KEY BIOLOGICAL OUTPUT**
   │     ├─ Script: scripts/find_coexpressolog_cliques.R
-  │     ├─ CPUs: 12 | Memory: 220 GB | Time: 2d
+  │     ├─ CPUs: 12 | Memory: 280 GB | Time: 2d | MaxForks: 4
+  │     ├─ Label: very_high_mem
+  │     ├─ Container: RComPlEx.sif (R 4.5.2 + igraph::max_cliques)
   │     ├─ Input: ALL 03_comparison.RData files for tissue
   │     ├─ Biological Purpose:
   │     │   Identify COMPLETE GENE MODULES where ALL pairwise co-expression
@@ -222,6 +237,8 @@ After all species pairs complete for each tissue (SYNCHRONIZATION POINT):
   │
   └─→ SUMMARY_REPORT
         ├─ Script: Nextflow process (inline bash)
+        ├─ CPUs: 2 | Memory: 500 GB | Time: 24h | MaxForks: 8
+        ├─ Label: high_mem
         ├─ Input: All clique TSV files
         ├─ Actions:
         │   - Count cliques per tissue and life habit
@@ -264,15 +281,66 @@ DEPENDENCY CHAIN
 RESOURCE ALLOCATION SUMMARY
 ═══════════════════════════════════════════════════════════════════════════════
 
-Step 1 (Load/Filter):        2 CPUs,  8 GB  → IO-bound, quick
-Step 2 (Compute Networks):  24 CPUs, 280 GB → Matrix multiplication intensive
-Step 3 (Compare Networks):  24 CPUs, 280 GB → Parallel iteration intensive
-Step 4 (Summary/Stats):      2 CPUs,  8 GB  → Data aggregation, quick
+Process                        CPUs    Memory    Time    MaxForks  Retries
+────────────────────────────────────────────────────────────────────────────────
+PREPARE_PAIR                   2       8 GB      15m     20        -
+RCOMPLEX_01_LOAD_FILTER        2       8 GB      15m     20        -
+RCOMPLEX_02_COMPUTE_NETWORKS   24→48   200→400GB 24h     10        2
+RCOMPLEX_03_NETWORK_COMPARISON 12→24   150→300GB 24h     10        2
+RCOMPLEX_04_SUMMARY_STATS      4       16 GB     1h      15        -
+FIND_CLIQUES                   12      280 GB    2d      4         -
+SUMMARY_REPORT                 2       500 GB    24h     8         -
 
-Total per pair: 24 CPUs peak, 280 GB peak memory during steps 2-3
+Resource Labels:
+  - low_mem:       2 CPUs, 8 GB, 30m, maxForks=30
+  - medium_mem:    4 CPUs, 16 GB, 2h, maxForks=15
+  - high_mem:      2 CPUs, 500 GB, 24h, maxForks=8
+  - very_high_mem: 12 CPUs, 280 GB, 2d, maxForks=4
 
-With 100 pairs per tissue × 2 tissues = 200 concurrent operations possible
-(depending on SLURM cluster configuration and --max_forks parameter)
+Optimizations (from original implementation):
+  ✓ Increased CPUs for steps 2-3 (24 → 24/12 with 48/24 retry)
+  ✓ Reduced memory for step 2 (280 → 200 GB, R is CPU-bound)
+  ✓ Increased maxForks (5→10 for high compute steps)
+  ✓ Added automatic retry on OOM (exit 137)
+  ✓ Dynamic resource scaling on retry attempts
+
+Total per pair peak: 24-48 CPUs, 200-400 GB memory during steps 2-3
+With 100 pairs per tissue × 2 tissues = 200 concurrent pair-level operations
+Parallelization controlled by maxForks to prevent cluster overload
+
+═══════════════════════════════════════════════════════════════════════════════
+
+CONTAINER AND EXECUTION ENVIRONMENT
+═══════════════════════════════════════════════════════════════════════════════
+
+Container: RComPlEx.sif
+  - Base Image: rocker/tidyverse:4.5.2
+  - R Version: 4.5.2
+  - Key Packages: tidyverse, igraph, furrr, future, data.table, Rfast,
+                  matrixStats, gplots, RColorBrewer, cowplot, DT, optparse,
+                  yaml, glue, conflicted
+  - System Libraries: gsl, gfortran, OpenBLAS, LAPACK
+  - Optional: WGCNA (for alternative correlation methods)
+
+Singularity Configuration:
+  - Enabled: Yes (all processes use container)
+  - Cache Directory: /local/genome/packages/singularity/CACHE/nextflow
+  - Run Options: --bind $TMPDIR:/tmp --no-home --containall
+  - Auto Mount: Yes (filesystem access)
+  - Stage In Mode: copy (safer for parallel access)
+  - Stage Out Mode: move (faster output)
+
+SLURM Configuration:
+  - Executor: slurm
+  - Queue: orion
+  - Account: nmbu
+  - Scratch: Enabled (local scratch for I/O performance)
+  - Module: singularity (loaded before each job)
+
+Profiles Available:
+  - slurm: Production HPC with container (default)
+  - standard: Local execution without SLURM
+  - test: Test mode with limited pairs (--test_mode true)
 
 ═══════════════════════════════════════════════════════════════════════════════
 
@@ -280,43 +348,99 @@ MONITORING AND DEBUGGING
 ═══════════════════════════════════════════════════════════════════════════════
 
 Watch progress:
-  nextflow run main.nf --use_ng -with-timeline timeline.html
+  nextflow run main.nf -profile slurm -with-timeline timeline.html \
+                        -with-report report.html -with-trace trace.txt
 
 Check logs:
   .nextflow/logs/  (overall execution logs)
+  tail -f .nextflow.log  (live monitoring)
 
 Check work directory:
   .nextflow/work/XX/YYYYYY/  (per-process directories)
+  ls work/*/*/.command.{sh,log,err,out}  (inspect job files)
+
+Check SLURM jobs:
+  squeue -u $USER  (see running/pending jobs)
+  sacct -j JOBID --format=JobID,JobName,State,ExitCode,MaxRSS,Elapsed
 
 Inspect intermediate results:
-  R console: load("01_filtered_data.RData")
+  # Load R data files
+  R console: load("work/XX/YYYYYY/01_filtered_data.RData")
   R console: head(ortho)
   R console: dim(species1_net)
+  
+  # Check process output
+  cat work/XX/YYYYYY/.command.log
+  cat work/XX/YYYYYY/.command.err
 
 Final results location:
   rcomplex_data/{tissue}/results/{pair_id}/
     ├── 04_summary_statistics.tsv
     ├── 04_pvalue_correlation.png
     └── 04_effect_size_plot.png
+  
+  results/
+    ├── coexpressolog_cliques_{tissue}_all.tsv
+    ├── coexpressolog_cliques_{tissue}_annual.tsv
+    ├── coexpressolog_cliques_{tissue}_perennial.tsv
+    ├── coexpressolog_cliques_{tissue}_shared.tsv
+    └── pipeline_summary.txt
 
 ═══════════════════════════════════════════════════════════════════════════════
 
 ERROR RECOVERY
 ═══════════════════════════════════════════════════════════════════════════════
 
-If Step 2 fails:
-  1. Check error message and log file
-  2. Fix the issue (if data-related, check 01_filtered_data.RData)
-  3. nextflow run main.nf --use_ng -resume
-  4. Nextflow will re-run step 2 and cascade to 3, 4
+Automatic Retry Mechanisms:
+  - Steps 2 & 3 have automatic retry on OOM (exit 137)
+  - Retry with increased resources (2x CPUs, 2x memory)
+  - Max retries: 2 attempts per task
 
-If Step 3 fails:
-  1. Check error message in work directory
-  2. May be data consistency issue (check validation in step 3)
-  3. Can manually re-run step 3:
-     Rscript scripts/rcomplex_03_network_comparison.R \
-        --tissue root --pair_id Species1_Species2 \
-        --workdir . --indir work/dir --outdir . --cores 24
-  4. Then re-submit pipeline with -resume
+If Step 2 (COMPUTE_NETWORKS) fails:
+  1. Check error in work directory:
+     cat work/XX/YYYYYY/.command.err
+  2. Common issues:
+     - OOM (exit 137): Will auto-retry with more memory
+     - Data corruption: Check 01_filtered_data.RData
+     - Correlation computation failure: Check R package versions
+  3. Resume pipeline:
+     nextflow run main.nf -profile slurm -resume
+  4. Nextflow will re-run failed tasks and cascade to 3, 4
+
+If Step 3 (NETWORK_COMPARISON) fails:
+  1. Check error message in work directory:
+     cat work/XX/YYYYYY/.command.err
+     cat work/XX/YYYYYY/.command.log
+  2. Common issues:
+     - OOM (exit 137): Will auto-retry with more memory
+     - Missing orthologs: Check data consistency in step 1
+     - Hypergeometric test failure: Check neighborhood sizes
+  3. Manual re-run (if needed):
+     apptainer exec RComPlEx.sif \
+       Rscript scripts/rcomplex_03_network_comparison.R \
+         --tissue root --pair_id Species1_Species2 \
+         --workdir . --indir work/XX/YYYYYY --outdir . --cores 12
+  4. Resume pipeline:
+     nextflow run main.nf -profile slurm -resume
+
+If FIND_CLIQUES fails:
+  1. Check memory usage (requires 280 GB)
+  2. Verify all 03_comparison.RData files exist
+  3. Check igraph installation in container
+  4. Resume with: nextflow run main.nf -profile slurm -resume
+
+QoS/SLURM Configuration Errors:
+  1. Run QoS validation:
+     ./check_qos.sh
+  2. See QOS_CONFIGURATION_GUIDE.md for setup
+  3. Update nextflow.config with correct QoS name
+
+General Debugging Strategy:
+  1. Find failed task work directory: .nextflow/work/XX/YYYYYY/
+  2. Check SLURM logs: .command.log, .command.err
+  3. Inspect input data: load RData files in R console
+  4. Check resource usage: sacct -j JOBID --format=MaxRSS,Elapsed
+  5. Fix issue and resume: nextflow run main.nf -resume
+  6. Always use -resume to avoid re-running successful tasks
 
 ═══════════════════════════════════════════════════════════════════════════════
