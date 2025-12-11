@@ -240,9 +240,6 @@ process FIND_CLIQUES {
     #!/bin/bash
     set -e
 
-    # Load R
-    module load R/4.4.2
-
     # Create results directory structure matching original layout
     mkdir -p rcomplex_results/${tissue}/results
 
