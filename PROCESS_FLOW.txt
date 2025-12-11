@@ -429,12 +429,6 @@ If FIND_CLIQUES fails:
   3. Check igraph installation in container
   4. Resume with: nextflow run main.nf -profile slurm -resume
 
-QoS/SLURM Configuration Errors:
-  1. Run QoS validation:
-     ./check_qos.sh
-  2. See QOS_CONFIGURATION_GUIDE.md for setup
-  3. Update nextflow.config with correct QoS name
-
 General Debugging Strategy:
   1. Find failed task work directory: .nextflow/work/XX/YYYYYY/
   2. Check SLURM logs: .command.log, .command.err
