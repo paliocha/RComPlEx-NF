@@ -370,11 +370,13 @@ workflow {
     """.stripIndent()
 
     // Validate inputs early (fail in 10 seconds, not after failed jobs)
-    // Use Nextflow's projectDir directly - $HOME is consistent across all Orion nodes
+    // Use container for validation to ensure consistent environment
     Channel.of(1).map {
         def validate_script = "${projectDir}/scripts/validate_inputs.R"
         def config_file = "${params.config}"
-        def cmd = ['/bin/bash', '-c', "source ~/.bashrc && module load R/4.4.2 && Rscript ${validate_script} --config ${config_file} --workdir ${params.workdir}"]
+        def container_path = params.container
+        // Use singularity exec with proper bind mounts
+        def cmd = ['/bin/bash', '-c', "module load singularity && singularity exec --bind ${System.getenv('TMPDIR')}:/tmp --bind ${System.getenv('PROJECTS')}:${System.getenv('PROJECTS')} --bind ${System.getenv('HOME')}:${System.getenv('HOME')} ${container_path} Rscript ${validate_script} --config ${config_file} --workdir ${params.workdir}"]
         def proc = cmd.execute(null, new File(projectDir.toString()))
         def output = new StringBuilder()
         def errorOutput = new StringBuilder()
