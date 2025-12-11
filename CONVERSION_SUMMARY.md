@@ -97,7 +97,7 @@ profiles {
     slurm {
         process.executor = 'slurm'
         process.queue = 'orion'
-        process.clusterOptions = '--account=nn9885k'
+        process.clusterOptions = '--account=nmbu'
         executor.queueSize = 10  // Max concurrent jobs
     }
 }
