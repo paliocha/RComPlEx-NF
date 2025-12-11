@@ -4,21 +4,37 @@ channels:
   - bioconda
   - defaults
 dependencies:
-  - r-base=4.4.2
-  - r-tidyverse
-  - r-future
-  - r-furrr
-  - r-gplots
-  - r-rcolorbrewer
-  - r-cowplot
-  - r-dt
-  - r-matrixstats
-  - r-optparse
-  - r-yaml
-  - r-igraph
-  - r-matrix
-  - r-ggplot2
-  - r-glue
-  - r-rmarkdown
-  # Optional: For threaded correlation computation (if you decide to use WGCNA's cor)
+  # R version matching RComPlEx.def (rocker/tidyverse:4.5.2)
+  - r-base=4.5.2
+  
+  # Essential packages for RComPlEx
+  - r-tidyverse        # Data wrangling and visualization ecosystem
+  - r-igraph           # Network/graph analysis (core for RComPlEx)
+  - r-future           # Evaluation framework for parallel processing
+  - r-furrr            # Parallel functional programming
+  
+  # Plotting and visualization
+  - r-gplots           # Extended plotting functions
+  - r-rcolorbrewer     # Color palettes
+  - r-cowplot          # Plot composition and alignment
+  - r-ggplot2          # Grammar of graphics (included in tidyverse)
+  
+  # Data manipulation and processing
+  - r-data.table       # Fast data manipulation
+  - r-matrixstats      # Fast matrix functions
+  - r-rfast            # High-performance computations (Tcrossprod)
+  - r-matrix           # Sparse and dense matrix classes
+  
+  # Interactive and reporting
+  - r-dt               # Interactive data tables
+  - r-rmarkdown        # R Markdown support
+  
+  # Utility packages
+  - r-optparse         # Command line argument parsing
+  - r-yaml             # YAML configuration file parsing
+  - r-glue             # String interpolation
+  - r-conflicted       # Manage function name conflicts
+  
+  # Optional: Weighted Gene Co-Expression Network Analysis
+  # Uncomment if needed for your analysis
   # - bioconda::bioconductor-wgcna
