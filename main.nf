@@ -370,14 +370,12 @@ workflow {
     """.stripIndent()
 
     // Validate inputs early (fail in 10 seconds, not after failed jobs)
-    // Orion HPC workaround: Use $HOME-based path since compute nodes see /mnt/users
+    // Use Nextflow's projectDir directly - $HOME is consistent across all Orion nodes
     Channel.of(1).map {
-        def home = System.getenv('HOME')  // e.g., /mnt/users/martpali
-        def validationDir = "${home}/AnnualPerennial/RComPlEx"
-        def validate_script = "${validationDir}/scripts/validate_inputs.R"
-        def config_file = "${validationDir}/config/pipeline_config.yaml"
-        def cmd = ['/bin/bash', '-c', "source ~/.bashrc && module load R/4.4.2 && Rscript ${validate_script} --config ${config_file} --workdir ${validationDir}"]
-        def proc = cmd.execute(null, new File(validationDir))  // Execute in validation directory
+        def validate_script = "${projectDir}/scripts/validate_inputs.R"
+        def config_file = "${params.config}"
+        def cmd = ['/bin/bash', '-c', "source ~/.bashrc && module load R/4.4.2 && Rscript ${validate_script} --config ${config_file} --workdir ${params.workdir}"]
+        def proc = cmd.execute(null, new File(projectDir))
         def output = new StringBuilder()
         def error = new StringBuilder()
         proc.waitForProcessOutput(output, error)
