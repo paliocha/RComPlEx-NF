@@ -10,14 +10,10 @@
 nextflow.enable.dsl=2
 
 // ============================================================================
-// Parameters - Main config in nextflow.config, these are additional/overridable
+// Parameters
 // ============================================================================
 
-// Additional parameters not in nextflow.config
-params.container = "${projectDir}/RComPlEx.sif"
-params.script_dir = System.getenv('RCOMPLEX_HOME') ?: projectDir
-
-// Note: workdir, outdir, tissues, test_mode, help are defined in nextflow.config
+// All key parameters (workdir, outdir, tissues, container) are in nextflow.config
 // Override with: --workdir /path --outdir /path --tissues root,leaf
 
 // Help message
@@ -98,16 +94,13 @@ process PREPARE_PAIR {
     #!/bin/bash
     set -e
 
-    PROJECT_DIR="${params.workdir}"
-    SCRIPT_DIR="${params.script_dir}"
-
     # Prepare single pair (paths translated at runtime by R scripts)
-    Rscript "\${SCRIPT_DIR}/scripts/prepare_single_pair.R" \\
+    Rscript "${projectDir}/scripts/prepare_single_pair.R" \\
         --tissue ${tissue} \\
         --sp1 ${sp1} \\
         --sp2 ${sp2} \\
-        --config "\${PROJECT_DIR}/config/pipeline_config.yaml" \\
-        --workdir "\${PROJECT_DIR}"
+        --config "${projectDir}/config/pipeline_config.yaml" \\
+        --workdir "${params.workdir}"
     """
 }
 
@@ -128,15 +121,12 @@ process RCOMPLEX_01_LOAD_FILTER {
     #!/bin/bash
     set -e
 
-    PROJECT_DIR="${params.workdir}"
-    SCRIPT_DIR="${params.script_dir}"
-
     # Step 1: Load and filter data (paths translated at runtime by R scripts, R from container)
-    Rscript "\${SCRIPT_DIR}/scripts/rcomplex_01_load_filter.R" \\
+    Rscript "${projectDir}/scripts/rcomplex_01_load_filter.R" \\
         --tissue ${tissue} \\
         --pair_id ${pair_id} \\
-        --config "\${PROJECT_DIR}/config/pipeline_config.yaml" \\
-        --workdir "\${PROJECT_DIR}" \\
+        --config "${projectDir}/config/pipeline_config.yaml" \\
+        --workdir "${params.workdir}" \\
         --outdir .
     """
 }
@@ -158,16 +148,13 @@ process RCOMPLEX_02_COMPUTE_NETWORKS {
     #!/bin/bash
     set -e
 
-    PROJECT_DIR="${params.workdir}"
-    SCRIPT_DIR="${params.script_dir}"
-
     # Step 2: Compute networks (paths translated at runtime by R scripts, R from container)
     # Using ${task.cpus} CPUs for parallel computation
-    Rscript "\${SCRIPT_DIR}/scripts/rcomplex_02_compute_networks.R" \\
+    Rscript "${projectDir}/scripts/rcomplex_02_compute_networks.R" \\
         --tissue ${tissue} \\
         --pair_id ${pair_id} \\
-        --config "\${PROJECT_DIR}/config/pipeline_config.yaml" \\
-        --workdir "\${PROJECT_DIR}" \\
+        --config "${projectDir}/config/pipeline_config.yaml" \\
+        --workdir "${params.workdir}" \\
         --indir . \\
         --outdir . \\
         --cores ${task.cpus}
@@ -191,16 +178,13 @@ process RCOMPLEX_03_NETWORK_COMPARISON {
     #!/bin/bash
     set -e
 
-    PROJECT_DIR="${params.workdir}"
-    SCRIPT_DIR="${params.script_dir}"
-
     # Step 3: Network comparison (paths translated at runtime by R scripts, R from container)
     # Using ${task.cpus} CPUs for parallel ortholog comparison
-    Rscript "\${SCRIPT_DIR}/scripts/rcomplex_03_network_comparison.R" \\
+    Rscript "${projectDir}/scripts/rcomplex_03_network_comparison.R" \\
         --tissue ${tissue} \\
         --pair_id ${pair_id} \\
-        --config "\${PROJECT_DIR}/config/pipeline_config.yaml" \\
-        --workdir "\${PROJECT_DIR}\" \\
+        --config "${projectDir}/config/pipeline_config.yaml" \\
+        --workdir "${params.workdir}" \\
         --indir . \\
         --outdir . \\
         --cores ${task.cpus}
@@ -227,14 +211,11 @@ process RCOMPLEX_04_SUMMARY_STATS {
     #!/bin/bash
     set -e
 
-    PROJECT_DIR="${params.workdir}"
-    SCRIPT_DIR="${params.script_dir}"
-
     # Step 4: Generate summary statistics (paths translated at runtime by R scripts, R from container)
-    Rscript "\${SCRIPT_DIR}/scripts/rcomplex_04_summary_stats.R" \\
+    Rscript "${projectDir}/scripts/rcomplex_04_summary_stats.R" \\
         --tissue ${tissue} \\
         --pair_id ${pair_id} \\
-        --workdir "\${PROJECT_DIR}" \\
+        --workdir "${params.workdir}" \\
         --indir . \\
         --outdir .
     """
@@ -284,14 +265,11 @@ process FIND_CLIQUES {
         exit 1
     fi
 
-    PROJECT_DIR="${params.workdir}"
-    SCRIPT_DIR="${params.script_dir}"
-
     # Run clique detection (paths translated at runtime by R scripts)
-    Rscript "\${SCRIPT_DIR}/scripts/find_coexpressolog_cliques.R" \\
+    Rscript "${projectDir}/scripts/find_coexpressolog_cliques.R" \\
         --tissue ${tissue} \\
-        --config "\${PROJECT_DIR}/config/pipeline_config.yaml" \\
-        --workdir "\${PROJECT_DIR}" \\
+        --config "${projectDir}/config/pipeline_config.yaml" \\
+        --workdir "${params.workdir}" \\
         --outdir . \\
         --results_dir rcomplex_results/${tissue}/results
 
