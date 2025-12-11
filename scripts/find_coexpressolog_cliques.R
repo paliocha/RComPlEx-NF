@@ -62,8 +62,19 @@ if (is.null(opt$tissue)) {
 # Store working directory for path resolution
 workdir <- opt$workdir
 
-# Source config parser using absolute path
-source(file.path(workdir, "R/config_parser.R"))
+# Source config parser using path resolution (Orion HPC multi-mount issue)
+config_parser_candidates <- c(
+  "R/config_parser.R",
+  file.path(workdir, "R/config_parser.R"),
+  file.path(Sys.getenv("HOME", ""), "AnnualPerennial/RComPlEx/R/config_parser.R"),
+  "/opt/rcomplex/R/config_parser.R"
+)
+config_parser_path <- config_parser_candidates[file.exists(config_parser_candidates)][1]
+if (is.na(config_parser_path)) {
+  stop("Cannot locate R/config_parser.R; checked: ",
+       paste(config_parser_candidates, collapse = ", "))
+}
+source(config_parser_path)
 
 # Load configuration with workdir for path resolution
 config <- load_config(opt$config, workdir = workdir)
