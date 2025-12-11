@@ -13,17 +13,14 @@ nextflow.enable.dsl=2
 // Parameters
 // ============================================================================
 
-// Canonical project path (matches host path when using default Apptainer binds)
-def project_base = projectDir
-def script_dir = System.getenv('RCOMPLEX_HOME') ?: project_base
-
-params.config = "${project_base}/config/pipeline_config.yaml"
-params.workdir = project_base
+params.config = "${projectDir}/config/pipeline_config.yaml"
+params.workdir = projectDir
 params.tissues = ['root', 'leaf']  // Override with --tissues root to run single tissue
-params.outdir = "${project_base}/results"
+params.outdir = "${projectDir}/results"
 params.test_mode = false  // Set to true to run only 3 pairs per tissue
-params.container = "${project_base}/RComPlEx.sif"
+params.container = "${projectDir}/RComPlEx.sif"
 params.help = false
+params.script_dir = System.getenv('RCOMPLEX_HOME') ?: projectDir
 
 // Help message
 def helpMessage() {
@@ -60,11 +57,6 @@ def helpMessage() {
     """.stripIndent()
 }
 
-if (params.help) {
-    helpMessage()
-    exit 0
-}
-
 // ============================================================================
 // Process Definitions
 // ============================================================================
@@ -72,12 +64,10 @@ if (params.help) {
 process PREPARE_PAIR {
     label 'low_mem'
     tag "${tissue}:${sp1}_${sp2}"
-    publishDir "${params.workdir}/rcomplex_data/${tissue}/pairs/${sp1}_${sp2}", mode: 'symlink'
-    container params.container
-
-    cpus 2
-    memory '8 GB'
-    time '15m'
+    // OPTIMIZED: Use copy instead of symlink to avoid cross-filesystem issues
+    publishDir "${params.workdir}/rcomplex_data/${tissue}/pairs/${sp1}_${sp2}", mode: 'copy', overwrite: true
+    
+    // Resources controlled by config (label 'low_mem')
 
     input:
     tuple val(tissue), val(sp1), val(sp2)
@@ -94,8 +84,8 @@ process PREPARE_PAIR {
     #!/bin/bash
     set -e
 
-    PROJECT_DIR="${project_base}"
-    SCRIPT_DIR="${script_dir}"
+    PROJECT_DIR="${params.workdir}"
+    SCRIPT_DIR="${params.script_dir}"
 
     # Prepare single pair (paths translated at runtime by R scripts)
     Rscript "\${SCRIPT_DIR}/scripts/prepare_single_pair.R" \\
@@ -110,11 +100,8 @@ process PREPARE_PAIR {
 process RCOMPLEX_01_LOAD_FILTER {
     label 'low_mem'
     tag "${tissue}:${pair_id}"
-    container params.container
-
-    cpus 2
-    memory '8 GB'
-    time '30m'
+    
+    // Resources controlled by config (label 'low_mem')
 
     input:
     tuple val(tissue), val(pair_id)
@@ -127,8 +114,8 @@ process RCOMPLEX_01_LOAD_FILTER {
     #!/bin/bash
     set -e
 
-    PROJECT_DIR="${project_base}"
-    SCRIPT_DIR="${script_dir}"
+    PROJECT_DIR="${params.workdir}"
+    SCRIPT_DIR="${params.script_dir}"
 
     # Step 1: Load and filter data (paths translated at runtime by R scripts, R from container)
     Rscript "\${SCRIPT_DIR}/scripts/rcomplex_01_load_filter.R" \\
@@ -143,11 +130,8 @@ process RCOMPLEX_01_LOAD_FILTER {
 process RCOMPLEX_02_COMPUTE_NETWORKS {
     label 'high_mem'
     tag "${tissue}:${pair_id}"
-    container params.container
-
-    cpus 2
-    memory '300 GB'
-    time '4h'
+    
+    // Resources controlled by config (withName: RCOMPLEX_02_COMPUTE_NETWORKS)
 
     input:
     tuple val(tissue), val(pair_id), path(filtered_data)
@@ -160,10 +144,11 @@ process RCOMPLEX_02_COMPUTE_NETWORKS {
     #!/bin/bash
     set -e
 
-    PROJECT_DIR="${project_base}"
-    SCRIPT_DIR="${script_dir}"
+    PROJECT_DIR="${params.workdir}"
+    SCRIPT_DIR="${params.script_dir}"
 
     # Step 2: Compute networks (paths translated at runtime by R scripts, R from container)
+    # Using ${task.cpus} CPUs for parallel computation
     Rscript "\${SCRIPT_DIR}/scripts/rcomplex_02_compute_networks.R" \\
         --tissue ${tissue} \\
         --pair_id ${pair_id} \\
@@ -178,11 +163,8 @@ process RCOMPLEX_02_COMPUTE_NETWORKS {
 process RCOMPLEX_03_NETWORK_COMPARISON {
     label 'high_mem'
     tag "${tissue}:${pair_id}"
-    container params.container
-
-    cpus 2
-    memory '500 GB'
-    time '4h'
+    
+    // Resources controlled by config (withName: RCOMPLEX_03_NETWORK_COMPARISON)
 
     input:
     tuple val(tissue), val(pair_id), path(filtered_data), path(networks)
@@ -195,15 +177,16 @@ process RCOMPLEX_03_NETWORK_COMPARISON {
     #!/bin/bash
     set -e
 
-    PROJECT_DIR="${project_base}"
-    SCRIPT_DIR="${script_dir}"
+    PROJECT_DIR="${params.workdir}"
+    SCRIPT_DIR="${params.script_dir}"
 
     # Step 3: Network comparison (paths translated at runtime by R scripts, R from container)
+    # Using ${task.cpus} CPUs for parallel ortholog comparison
     Rscript "\${SCRIPT_DIR}/scripts/rcomplex_03_network_comparison.R" \\
         --tissue ${tissue} \\
         --pair_id ${pair_id} \\
         --config "\${PROJECT_DIR}/config/pipeline_config.yaml" \\
-        --workdir "\${PROJECT_DIR}" \\
+        --workdir "\${PROJECT_DIR}\" \\
         --indir . \\
         --outdir . \\
         --cores ${task.cpus}
@@ -213,12 +196,10 @@ process RCOMPLEX_03_NETWORK_COMPARISON {
 process RCOMPLEX_04_SUMMARY_STATS {
     label 'low_mem'
     tag "${tissue}:${pair_id}"
-    container params.container
-    publishDir "${params.workdir}/rcomplex_data/${tissue}/results/${pair_id}", mode: 'symlink'
-
-    cpus 2
-    memory '8 GB'
-    time '30m'
+    // OPTIMIZED: Use copy mode for better cross-filesystem compatibility
+    publishDir "${params.workdir}/rcomplex_data/${tissue}/results/${pair_id}", mode: 'copy', overwrite: true
+    
+    // Resources controlled by config (label 'low_mem')
 
     input:
     tuple val(tissue), val(pair_id), path(comparison)
@@ -232,8 +213,8 @@ process RCOMPLEX_04_SUMMARY_STATS {
     #!/bin/bash
     set -e
 
-    PROJECT_DIR="${project_base}"
-    SCRIPT_DIR="${script_dir}"
+    PROJECT_DIR="${params.workdir}"
+    SCRIPT_DIR="${params.script_dir}"
 
     # Step 4: Generate summary statistics (paths translated at runtime by R scripts, R from container)
     Rscript "\${SCRIPT_DIR}/scripts/rcomplex_04_summary_stats.R" \\
@@ -248,12 +229,9 @@ process RCOMPLEX_04_SUMMARY_STATS {
 process FIND_CLIQUES {
     label 'very_high_mem'
     tag "${tissue}"
-    container params.container
     publishDir "${params.outdir}/${tissue}", mode: 'move'
-
-    cpus 12
-    memory '220 GB'
-    time '2d'
+    
+    // Resources controlled by config (withName: FIND_CLIQUES)
 
     input:
     tuple val(tissue), path(comparison_files)
@@ -292,8 +270,8 @@ process FIND_CLIQUES {
         exit 1
     fi
 
-    PROJECT_DIR="${project_base}"
-    SCRIPT_DIR="${script_dir}"
+    PROJECT_DIR="${params.workdir}"
+    SCRIPT_DIR="${params.script_dir}"
 
     # Run clique detection (paths translated at runtime by R scripts)
     Rscript "\${SCRIPT_DIR}/scripts/find_coexpressolog_cliques.R" \\
@@ -315,10 +293,8 @@ process SUMMARY_REPORT {
     label 'medium_mem'
     tag "report"
     publishDir "${params.outdir}", mode: 'move'
-
-    cpus 4
-    memory '16 GB'
-    time '2h'
+    
+    // Resources controlled by config (label 'medium_mem')
 
     input:
     path clique_files
@@ -371,6 +347,12 @@ EOF
 // ============================================================================
 
 workflow {
+    
+    // Show help message if requested
+    if (params.help) {
+        helpMessage()
+        System.exit(0)
+    }
 
     // Ensure params.tissues is always a list (handle both String and List input)
     def tissues_list = params.tissues instanceof String ? [params.tissues] : params.tissues
@@ -424,10 +406,12 @@ workflow {
         it.replaceAll(' ', '_')  // Convert "Brachypodium distachyon" -> "Brachypodium_distachyon"
     }
 
-    pair_tuples = Channel.of(*tissues_list).flatMap { tissue ->
+    // Create channel from tissues list - use Groovy-style iteration
+    pair_tuples = Channel.fromList(tissues_list).flatMap { tissue ->
         def all_pairs = []
-        for (int i = 0; i < all_species.size(); i++) {
-            for (int j = i + 1; j < all_species.size(); j++) {
+        // Generate all unique species pairs using Groovy range syntax
+        (0..<all_species.size()).each { i ->
+            ((i+1)..<all_species.size()).each { j ->
                 all_pairs << tuple(tissue, all_species[i], all_species[j])
             }
         }
@@ -461,14 +445,14 @@ workflow {
     // Step 5: Collect all comparison RData files and find cliques
     // Use the comparison files directly, not summaries
     cliques_input = RCOMPLEX_03_NETWORK_COMPARISON.out.comparison
-        .map { tissue, pair_id, comparison_file -> tuple(tissue, comparison_file) }
+        .map { tissue, _pair_id, comparison_file -> tuple(tissue, comparison_file) }
         .groupTuple()
 
     FIND_CLIQUES(cliques_input)
 
     // 5. Generate summary report
     all_cliques = FIND_CLIQUES.out.cliques
-        .map { tissue, files -> files }
+        .map { _tissue, files -> files }
         .flatten()
         .collect()
 
@@ -476,7 +460,8 @@ workflow {
 }
 
 // ============================================================================
-// Workflow Completion
+// Workflow Completion Handlers
+// Note: These are valid DSL2 constructs, but may trigger lint warnings
 // ============================================================================
 
 workflow.onComplete {
