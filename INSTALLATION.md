@@ -1,6 +1,6 @@
 # Installation & Setup Guide
 
-This guide covers installing and setting up the RComPlEx-NG pipeline on your system.
+This guide covers installing and setting up the RComPlEx-NF pipeline on your system.
 
 ## System Requirements
 
@@ -62,16 +62,16 @@ sudo make -C builddir install
 #### Step 4: Clone Repository & Install RComPlEx
 
 ```bash
-# Clone the RComPlEx-NG repository
-git clone https://github.com/YOUR_USERNAME/RComPlEx-NG.git
-cd RComPlEx-NG
+# Clone the RComPlEx-NF repository
+git clone https://github.com/paliocha/RComPlEx-NF.git
+cd RComPlEx-NF
 
 # Create conda environment (optional, for development)
 mamba env create -f environment.yml
-mamba activate rcomplex-dev
+mamba activate rcomplex
 
 # Or install R packages individually
-mamba install -c conda-forge r-igraph r-furrr r-yaml r-optparse r-glue
+mamba install -c conda-forge r-base=4.5.2 r-igraph r-furrr r-yaml r-optparse r-glue r-data.table r-rfast
 ```
 
 ---
@@ -82,10 +82,15 @@ mamba install -c conda-forge r-igraph r-furrr r-yaml r-optparse r-glue
 
 ```bash
 # Load modules on login node
-module load nextflow/25.10.2
+module load nextflow/25.04.7   # Or latest available version
 module load apptainer/1.4.5
-module load r/4.4.2
+module load R/4.5.2
 module load gcc/11.4.0  # For compilation if needed
+
+# Verify versions
+nextflow -version
+apptainer --version
+R --version
 ```
 
 #### Step 2: Set Up Conda Environment
@@ -138,7 +143,7 @@ The pipeline uses Apptainer to containerize the analysis environment.
 
 ```bash
 # Navigate to project directory
-cd /path/to/RComPlEx-NG
+cd /path/to/RComPlEx-NF
 
 # Start interactive session (on login node, not compute node)
 qlogin
@@ -191,9 +196,18 @@ rm -rf /tmp/RComPlEx_*.sif /tmp/.apptainer_cache
 **Problem**: Build takes very long
 ```bash
 # Check if still building (in another terminal)
-tail -f /path/to/RComPlEx-NG/.nextflow.log
+tail -f /path/to/RComPlEx-NF/.nextflow.log
 
 # Normal build time: 15-30 minutes
+```
+
+**Problem**: QoS (Quality of Service) configuration issues
+```bash
+# Check available QoS settings for your account
+./check_qos.sh
+
+# Update nextflow.config with correct QoS name
+# See QOS_CONFIGURATION_GUIDE.md for details
 ```
 
 ---
@@ -203,8 +217,14 @@ tail -f /path/to/RComPlEx-NG/.nextflow.log
 ### Quick Validation Test
 
 ```bash
-# 1. Validate input data
-module load R/4.4.2
+# 1. Check QoS configuration (HPC only)
+./check_qos.sh
+
+# 2. Validate installation
+bash bin/validate_installation.sh
+
+# 3. Validate input data
+module load R/4.5.2
 Rscript scripts/validate_inputs.R \
   --config config/pipeline_config.yaml \
   --workdir .
@@ -246,55 +266,109 @@ head -5 results/root/coexpressolog_cliques_root_all.tsv
 ### environment.yml (Conda Dependencies)
 
 ```yaml
-name: rcomplex-dev
+name: rcomplex
 channels:
   - conda-forge
   - bioconda
+  - defaults
 dependencies:
-  - r-base=4.4.2
-  - r-igraph
-  - r-furrr
-  - r-future
-  - r-tidyverse
-  - r-yaml
-  - r-optparse
-  - r-glue
-  - r-gplots
-  - r-rcolorbrewer
-  - r-cowplot
-  - bioconda::bioconductor-wgcna=1.72
+  # R version matching RComPlEx.def (rocker/tidyverse:4.5.2)
+  - r-base=4.5.2
+  
+  # Essential packages for RComPlEx
+  - r-tidyverse        # Data wrangling and visualization ecosystem
+  - r-igraph           # Network/graph analysis (core for RComPlEx)
+  - r-future           # Evaluation framework for parallel processing
+  - r-furrr            # Parallel functional programming
+  
+  # Plotting and visualization
+  - r-gplots           # Extended plotting functions
+  - r-rcolorbrewer     # Color palettes
+  - r-cowplot          # Plot composition and alignment
+  - r-ggplot2          # Grammar of graphics (included in tidyverse)
+  
+  # Data manipulation and processing
+  - r-data.table       # Fast data manipulation
+  - r-matrixstats      # Fast matrix functions
+  - r-rfast            # High-performance computations (Tcrossprod)
+  - r-matrix           # Sparse and dense matrix classes
+  
+  # Interactive and reporting
+  - r-dt               # Interactive data tables
+  - r-rmarkdown        # R Markdown support
+  
+  # Utility packages
+  - r-optparse         # Command line argument parsing
+  - r-yaml             # YAML configuration file parsing
+  - r-glue             # String interpolation
+  - r-conflicted       # Manage function name conflicts
+  
+  # Optional: Weighted Gene Co-Expression Network Analysis
+  # Uncomment if needed for your analysis
+  # - bioconda::bioconductor-wgcna
 ```
 
 ### RComPlEx.def (Apptainer Container)
 
 ```
 Bootstrap: docker
-From: rocker/tidyverse:4.4.2
+From: rocker/tidyverse:4.5.2
+
+%files
+    scripts /opt/rcomplex/scripts
+    R /opt/rcomplex/R
+
+%labels
+    Author "Martin Paliocha & Torgeir Rhodén Hvidsten"
+    Version "1.0.0"
+    Description "RComPlEx: Comparative analysis of plant co-expression networks in R"
+    HPC "Apptainer 1.4.5+"
+    RVersion "4.5.2"
 
 %post
-    apt-get update && apt-get install -y \
-        libgsl-dev \
-        gfortran \
-        libopenblas-dev \
-        liblapack-dev \
-        && rm -rf /var/lib/apt/lists/*
-
+    apt-get update -qq
+    apt-get install -y --no-install-recommends \
+        ca-certificates curl git wget locales \
+        libssl-dev libcurl4-openssl-dev libxml2-dev \
+        libssl3 gsl-bin libgsl0-dev gfortran \
+        libopenblas-dev liblapack-dev
+    
+    locale-gen en_US.UTF-8
+    
     R --slave -e "
-        install.packages(c(
-            'igraph', 'furrr', 'future', 'yaml', 'optparse', 'glue',
-            'gplots', 'RColorBrewer', 'cowplot', 'DT'
-        ), repos='https://cran.r-project.org')
-
-        if (!require('WGCNA', quietly=TRUE)) {
-            install.packages('WGCNA', repos='https://cran.r-project.org')
-        }
+        options(repos = c(CRAN = 'https://cran.r-project.org'))
+        
+        essential_pkgs <- c(
+            'tidyverse', 'furrr', 'future', 'igraph', 'gplots', 
+            'RColorBrewer', 'conflicted', 'cowplot', 'DT', 
+            'data.table', 'optparse', 'yaml', 'glue', 
+            'matrixStats', 'Rfast'
+        )
+        
+        install.packages(essential_pkgs, dependencies=TRUE, clean=TRUE, quiet=TRUE)
+        
+        # Optional WGCNA
+        tryCatch({
+            install.packages('WGCNA', dependencies=TRUE, clean=TRUE, quiet=TRUE)
+        }, error = function(e) {
+            cat('Warning: Could not install WGCNA (optional)\n')
+        })
     "
+    
+    apt-get clean
+    rm -rf /var/lib/apt/lists/*
 
 %environment
+    export R_HOME=/usr/local/lib/R
+    export R_LIBS_USER="/usr/local/lib/R/site-library"
+    export RCOMPLEX_HOME=/opt/rcomplex
     export LC_ALL=C
+    export LANG=C
+    export OMP_NUM_THREADS=1
+    export DEBIAN_FRONTEND=noninteractive
 
 %runscript
-    exec Rscript "\$@"
+    exec R "${@}"
 ```
 
 ---
@@ -350,24 +424,33 @@ cp config.example.yaml config/pipeline_config.yaml
 vim config/pipeline_config.yaml
 
 # Directory structure
-RComPlEx-NG/
+RComPlEx-NF/
 ├── main.nf
 ├── nextflow.config
 ├── README.md
 ├── METHOD.md
 ├── INPUT_FORMAT.md
+├── INSTALLATION.md
+├── QOS_CONFIGURATION_GUIDE.md
+├── VERIFICATION_REPORT.md
+├── check_qos.sh         # QoS validation script
+├── environment.yml      # Conda environment (R 4.5.2)
 ├── vst_hog.RDS          # Your data
 ├── N1_clean.RDS         # Your data
 ├── RComPlEx.sif         # Built container
+├── RComPlEx.def         # Container definition (R 4.5.2)
+├── bin/
+│   └── validate_installation.sh
 ├── config/
 │   └── pipeline_config.yaml
 ├── scripts/
 │   ├── validate_inputs.R
 │   ├── rcomplex_01_load_filter.R
-│   ├── ... (other scripts)
+│   └── ... (other scripts)
+├── R/
+│   └── config_parser.R
 ├── apptainer/
-│   ├── build_container.sh
-│   └── RComPlEx.def
+│   └── build_container.sh
 ├── slurm/
 │   └── run_nextflow.sh
 └── results/             # Output directory
@@ -512,18 +595,27 @@ sudo yum install -y apptainer
 
 | Component | Version | Status |
 |-----------|---------|--------|
-| Nextflow | 25.10.2+ | Tested |
-| R | 4.4.2 | Tested |
-| Apptainer | 1.4.5+ | Tested |
-| SLURM | 21.08+ | Compatible |
-| Docker | 20.10+ | Compatible |
+| Nextflow | 25.04.7+ | Tested ✅ |
+| R | 4.5.2 | Tested ✅ |
+| Apptainer | 1.4.5+ | Tested ✅ |
+| SLURM | 21.08+ | Compatible ✅ |
+| Docker | 20.10+ | Compatible ✅ |
+| rocker/tidyverse | 4.5.2 | Base Image ✅ |
+
+---
+
+## Additional Resources
+
+- **QoS Configuration**: See [QOS_CONFIGURATION_GUIDE.md](QOS_CONFIGURATION_GUIDE.md) for SLURM QoS setup
+- **Verification Report**: See [VERIFICATION_REPORT.md](VERIFICATION_REPORT.md) for system validation details
+- **Check QoS Script**: Run `./check_qos.sh` to verify your SLURM QoS settings
 
 ---
 
 ## Citation
 
 If you use this pipeline, please cite:
-1. **Pipeline**: RComPlEx-NG [GitHub URL when available]
+1. **Pipeline**: RComPlEx-NF (https://github.com/paliocha/RComPlEx-NF)
 2. **Method**: Netotea et al. (2014) Nature Communications
 3. **Tools**: Nextflow, Apptainer, R packages (igraph, furrr, etc.)
 
