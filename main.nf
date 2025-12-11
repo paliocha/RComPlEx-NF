@@ -10,17 +10,15 @@
 nextflow.enable.dsl=2
 
 // ============================================================================
-// Parameters
+// Parameters - Main config in nextflow.config, these are additional/overridable
 // ============================================================================
 
-params.config = "${projectDir}/config/pipeline_config.yaml"
-params.workdir = projectDir
-params.tissues = ['root', 'leaf']  // Override with --tissues root to run single tissue
-params.outdir = "${projectDir}/results"
-params.test_mode = false  // Set to true to run only 3 pairs per tissue
+// Additional parameters not in nextflow.config
 params.container = "${projectDir}/RComPlEx.sif"
-params.help = false
 params.script_dir = System.getenv('RCOMPLEX_HOME') ?: projectDir
+
+// Note: workdir, outdir, tissues, test_mode, help are defined in nextflow.config
+// Override with: --workdir /path --outdir /path --tissues root,leaf
 
 // Help message
 def helpMessage() {
@@ -39,7 +37,9 @@ def helpMessage() {
         --tissues <tissue>     Tissues to analyze [default: root,leaf]
                                Use --tissues root or --tissues leaf for single tissue
         --test_mode            Run with first 3 pairs only [default: false]
-        --outdir <path>        Output directory [default: results/]
+        --workdir <path>       Working directory for intermediate files [default: ${projectDir}]
+        --outdir <path>        Output directory for final results [default: ${projectDir}/results]
+        -w <path>              Nextflow work directory for temp files [default: ./work]
         --config <path>        Config file [default: config/pipeline_config.yaml]
         --help                 Show this message and exit
     
@@ -48,10 +48,24 @@ def helpMessage() {
         -profile standard      Local executor
         -profile test          Test mode with limited pairs
     
-    Example:
+    Examples:
+        # Basic run
+        nextflow run main.nf -profile slurm
+        
+        # Single tissue
         nextflow run main.nf -profile slurm --tissues root
+        
+        # Custom directories
+        nextflow run main.nf -profile slurm --workdir /scratch/data --outdir /project/results
+        
+        # Custom Nextflow work directory (for temp files)
+        nextflow run main.nf -profile slurm -w /scratch/work
+        
+        # Test mode
         nextflow run main.nf -profile test
-        nextflow run main.nf -resume  # Resume from cached steps
+        
+        # Resume from cached steps
+        nextflow run main.nf -resume
     
     ═══════════════════════════════════════════════════════════════
     """.stripIndent()
