@@ -145,6 +145,7 @@ process RCOMPLEX_02_COMPUTE_NETWORKS {
 
     output:
     tuple val(tissue), val(pair_id), path(filtered_data), path("02_networks.RData"), emit: networks
+    tuple val(tissue), val(pair_id), path(filtered_data), path("02_networks_unsigned.RData"), emit: networks_unsigned
 
     script:
     """
@@ -192,6 +193,39 @@ process RCOMPLEX_03_NETWORK_COMPARISON {
         --indir . \\
         --outdir . \\
         --cores ${task.cpus}
+    """
+}
+
+// Optional unsigned comparison consuming unsigned MR networks
+process RCOMPLEX_03_NETWORK_COMPARISON_UNSIGNED {
+    label 'high_mem'
+    tag "${tissue}:${pair_id}"
+    cache 'lenient'  // Ignore resource changes for caching
+    
+    // Resources controlled by config (withName: RCOMPLEX_03_NETWORK_COMPARISON_UNSIGNED)
+
+    input:
+    tuple val(tissue), val(pair_id), path(filtered_data), path(networks_unsigned)
+
+    output:
+    tuple val(tissue), val(pair_id), path("03_${pair_id}_unsigned.RData"), emit: comparison_unsigned
+
+    script:
+    """
+    #!/bin/bash
+    set -e
+
+    # Step 3 (unsigned): Network comparison using unsigned MR networks
+    # Using ${task.cpus} CPUs for parallel ortholog comparison
+    Rscript "${projectDir}/scripts/rcomplex_03_network_comparison.R" \
+        --tissue ${tissue} \
+        --pair_id ${pair_id} \
+        --config "${projectDir}/config/pipeline_config.yaml" \
+        --workdir "${params.workdir}" \
+        --indir . \
+        --outdir . \
+        --cores ${task.cpus} \
+        --unsigned TRUE
     """
 }
 
@@ -412,6 +446,7 @@ workflow {
 
     // Step 3: Perform network comparisons
     RCOMPLEX_03_NETWORK_COMPARISON(RCOMPLEX_02_COMPUTE_NETWORKS.out.networks)
+    RCOMPLEX_03_NETWORK_COMPARISON_UNSIGNED(RCOMPLEX_02_COMPUTE_NETWORKS.out.networks_unsigned)
 
     // Step 4: Generate summary statistics and plots
     RCOMPLEX_04_SUMMARY_STATS(RCOMPLEX_03_NETWORK_COMPARISON.out.comparison)
@@ -423,6 +458,9 @@ workflow {
         .groupTuple()
 
     FIND_CLIQUES(cliques_input)
+
+    // Optionally, we could wire unsigned comparison files to a separate clique analysis
+    // For now, we keep unsigned outputs available for downstream exploration without changing final outputs
 
     // 5. Generate summary report
     all_cliques = FIND_CLIQUES.out.cliques
