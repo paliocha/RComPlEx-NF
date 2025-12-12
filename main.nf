@@ -366,59 +366,6 @@ workflow {
     ══════════════════════════════════════════════════════════════
     """.stripIndent()
 
-    // Validate inputs early (fail in 10 seconds, not after failed jobs)
-    // Use container for validation to ensure consistent environment
-    Channel.of(1).map {
-        // Resolve paths that may use /net/fs-2 to /mnt/users (Orion HPC multi-mount issue)
-        def resolve_orion_path = { path ->
-            path.toString().replaceFirst('^/net/fs-2/scale/OrionStore/Home/', '/mnt/users/')
-        }
-        
-        def validate_script = resolve_orion_path("${projectDir}/scripts/validate_inputs.R")
-        def config_file = resolve_orion_path("${params.config}")
-        def container_path = params.container
-        
-        // Get environment variables needed for the command
-        def tmpdir = System.getenv('TMPDIR') ?: '/tmp'
-        def projects = System.getenv('PROJECTS') ?: '/mnt/project'
-        def home = System.getenv('HOME') ?: System.getProperty('user.home')
-        
-        // Build command string with proper escaping
-        def cmdString = "module load singularity && singularity exec --bind '${tmpdir}':/tmp --bind '${projects}':'${projects}' --bind '${home}':'${home}' '${container_path}' Rscript '${validate_script}' --config '${config_file}' --workdir '${params.workdir}'"
-        
-        log.info "Running validation command:"
-        log.info "  ${cmdString}"
-        
-        // Use singularity exec with proper bind mounts
-        def cmd = ['/bin/bash', '-c', cmdString]
-        
-        // Execute with current environment
-        def env = System.getenv().collect { k, v -> "$k=$v" }
-        def proc = cmd.execute(env, new File(home))
-        def output = new StringBuilder()
-        def errorOutput = new StringBuilder()
-        proc.waitForProcessOutput(output, errorOutput)
-        
-        def exitCode = proc.exitValue()
-        if (exitCode != 0) {
-            System.err.println "═══════════════════════════════════════════════════════════"
-            System.err.println "VALIDATION FAILED (exit code: ${exitCode})"
-            System.err.println "═══════════════════════════════════════════════════════════"
-            System.err.println "Command: ${cmdString}"
-            System.err.println "Working directory: ${home}"
-            System.err.println "───────────────────────────────────────────────────────────"
-            System.err.println "STDOUT:"
-            System.err.println output.toString()
-            System.err.println "───────────────────────────────────────────────────────────"
-            System.err.println "STDERR:"
-            System.err.println errorOutput.toString()
-            System.err.println "═══════════════════════════════════════════════════════════"
-            throw new Exception("Input validation failed")
-        }
-        println output.toString()
-        true
-    }.first()
-
     // Load species list from YAML config
     def config_file = new File("${params.config}")
     def config = new org.yaml.snakeyaml.Yaml().load(config_file.text)
