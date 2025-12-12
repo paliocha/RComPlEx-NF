@@ -107,6 +107,7 @@ process PREPARE_PAIR {
 process RCOMPLEX_01_LOAD_FILTER {
     label 'low_mem'
     tag "${tissue}:${pair_id}"
+    cache 'lenient'  // Ignore resource changes for caching
     
     // Resources controlled by config (label 'low_mem')
 
@@ -134,6 +135,7 @@ process RCOMPLEX_01_LOAD_FILTER {
 process RCOMPLEX_02_COMPUTE_NETWORKS {
     label 'high_mem'
     tag "${tissue}:${pair_id}"
+    cache 'lenient'  // Ignore resource changes for caching
     
     // Resources controlled by config (withName: RCOMPLEX_02_COMPUTE_NETWORKS)
 
@@ -164,6 +166,7 @@ process RCOMPLEX_02_COMPUTE_NETWORKS {
 process RCOMPLEX_03_NETWORK_COMPARISON {
     label 'high_mem'
     tag "${tissue}:${pair_id}"
+    cache 'lenient'  // Ignore resource changes for caching
     
     // Resources controlled by config (withName: RCOMPLEX_03_NETWORK_COMPARISON)
 
