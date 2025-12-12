@@ -205,12 +205,20 @@ gc(verbose = FALSE)
 cor_elapsed <- as.numeric(difftime(Sys.time(), cor_start, units = "secs"))
 cat("✓ Correlation computation completed in", round(cor_elapsed, 1), "seconds\n\n")
 
-# Apply sign correction
+# Preserve a copy for unsigned analysis
+species1_net_unsigned <- NULL
+species2_net_unsigned <- NULL
+
+# Apply sign correction (unsigned analysis uses absolute correlations)
 if (cor_sign == "abs") {
   cat("Applying absolute value to correlations...\n")
   species1_net <- abs(species1_net)
   species2_net <- abs(species2_net)
 }
+
+# Always compute an unsigned view for polarity divergence analysis
+species1_net_unsigned <- abs(species1_net)
+species2_net_unsigned <- abs(species2_net)
 
 # NORMALIZATION
 # =============
@@ -250,6 +258,7 @@ if (norm_method == "CLR") {
 
   # Species 1: Fast ranking + vectorized MR with Rfast
   cat("Ranking and computing MR for", species1_name, "...\n")
+  # Signed MR (ranks on current matrix)
   R1 <- Rfast::rowRanks(species1_net, method = "average", parallel = TRUE, cores = n_cores)
   species1_net <- sqrt(Rfast::Tcrossprod(R1, R1))
   rownames(species1_net) <- species1_genes
@@ -259,11 +268,28 @@ if (norm_method == "CLR") {
 
   # Species 2: Fast ranking + vectorized MR with Rfast
   cat("Ranking and computing MR for", species2_name, "...\n")
+  # Signed MR (ranks on current matrix)
   R2 <- Rfast::rowRanks(species2_net, method = "average", parallel = TRUE, cores = n_cores)
   species2_net <- sqrt(Rfast::Tcrossprod(R2, R2))
   rownames(species2_net) <- species2_genes
   colnames(species2_net) <- species2_genes
   rm(R2)
+  gc(verbose = FALSE)
+
+  # Also compute UNSIGNED MR (ranks on absolute correlations) for polarity analysis
+  cat("Computing UNSIGNED MR for polarity divergence analysis...\n")
+  R1u <- Rfast::rowRanks(species1_net_unsigned, method = "average", parallel = TRUE, cores = n_cores)
+  species1_net_unsigned <- sqrt(Rfast::Tcrossprod(R1u, R1u))
+  rownames(species1_net_unsigned) <- species1_genes
+  colnames(species1_net_unsigned) <- species1_genes
+  rm(R1u)
+  gc(verbose = FALSE)
+
+  R2u <- Rfast::rowRanks(species2_net_unsigned, method = "average", parallel = TRUE, cores = n_cores)
+  species2_net_unsigned <- sqrt(Rfast::Tcrossprod(R2u, R2u))
+  rownames(species2_net_unsigned) <- species2_genes
+  colnames(species2_net_unsigned) <- species2_genes
+  rm(R2u)
   gc(verbose = FALSE)
 
   norm_elapsed <- as.numeric(difftime(Sys.time(), norm_start, units = "secs"))
@@ -303,6 +329,13 @@ cat("Saving networks to:", output_file, "\n")
 save(species1_net, species2_net, species1_thr, species2_thr,
      species1_name, species2_name,
      file = output_file)
+
+# Save unsigned MR networks for polarity analysis (additional output)
+output_file_unsigned <- file.path(opt$outdir, "02_networks_unsigned.RData")
+cat("Saving unsigned MR networks to:", output_file_unsigned, "\n")
+save(species1_net_unsigned, species2_net_unsigned,
+  species1_name, species2_name,
+  file = output_file_unsigned)
 
 cat("\n")
 cat(rep("=", 80), "\n", sep = "")
