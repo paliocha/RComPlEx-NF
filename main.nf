@@ -338,11 +338,11 @@ process FIND_CLIQUES_UNSIGNED {
 
     mkdir -p rcomplex_results/${tissue}/results_unsigned
     for file in 03_*_unsigned.RData; do
-        pair_id=${file#03_}
-        pair_id=${pair_id%_unsigned.RData}
-        pair_dir="rcomplex_results/${tissue}/results_unsigned/${pair_id}"
-        mkdir -p "$pair_dir"
-        ln -s "$(realpath $file)" "$pair_dir/03_comparison_unsigned.RData"
+        pair_id=\${file#03_}
+        pair_id=\${pair_id%_unsigned.RData}
+        pair_dir="rcomplex_results/${tissue}/results_unsigned/\${pair_id}"
+        mkdir -p "\$pair_dir"
+        ln -s "\$(realpath \$file)" "\$pair_dir/03_comparison_unsigned.RData"
     done
 
     Rscript "${projectDir}/scripts/find_coexpressolog_cliques.R" \
