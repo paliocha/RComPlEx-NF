@@ -74,6 +74,7 @@ def helpMessage() {
 process PREPARE_PAIR {
     label 'low_mem'
     tag "${tissue}:${sp1}_${sp2}"
+    cache 'lenient'  // Ignore resource changes for caching
     // OPTIMIZED: Use copy instead of symlink to avoid cross-filesystem issues
     publishDir "${params.workdir}/rcomplex_data/${tissue}/pairs/${sp1}_${sp2}", mode: 'copy', overwrite: true
     
@@ -197,6 +198,7 @@ process RCOMPLEX_03_NETWORK_COMPARISON {
 process RCOMPLEX_04_SUMMARY_STATS {
     label 'low_mem'
     tag "${tissue}:${pair_id}"
+    cache 'lenient'  // Ignore resource changes for caching
     // OPTIMIZED: Use copy mode for better cross-filesystem compatibility
     publishDir "${params.workdir}/rcomplex_data/${tissue}/results/${pair_id}", mode: 'copy', overwrite: true
     
@@ -227,6 +229,7 @@ process RCOMPLEX_04_SUMMARY_STATS {
 process FIND_CLIQUES {
     label 'very_high_mem'
     tag "${tissue}"
+    cache 'lenient'  // Ignore resource changes for caching
     publishDir "${params.outdir}/${tissue}", mode: 'move'
     
     // Resources controlled by config (withName: FIND_CLIQUES)
@@ -284,6 +287,7 @@ process FIND_CLIQUES {
 process SUMMARY_REPORT {
     label 'medium_mem'
     tag "report"
+    cache 'lenient'  // Ignore resource changes for caching
     publishDir "${params.outdir}", mode: 'move'
     
     // Resources controlled by config (label 'medium_mem')
