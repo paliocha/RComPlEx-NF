@@ -25,7 +25,7 @@ This ensures discovery of **complete functional modules** with tight coordinatio
 - **[METHOD.md](METHOD.md)** - Detailed algorithm explanation, statistical methods, hypergeometric testing
 - **[INPUT_FORMAT.md](INPUT_FORMAT.md)** - Data requirements, file formats, and validation
 - **[INSTALLATION.md](INSTALLATION.md)** - Setup instructions for local, HPC, and container environments
-- **[PROCESS_FLOW.txt](PROCESS_FLOW.txt)** - Step-by-step execution flow with biological context
+- **[PROCESS_FLOW.txt](PROCESS_FLOW.txt)** - Step-by-step execution flow with biological context (includes unsigned and polarity analysis)
 
 ## Scientific Background
 
@@ -66,6 +66,7 @@ Tissue-specific cliques reveal organ-specialized regulatory networks.
 - **Multi-copy ortholog handling**: Clique detection naturally handles many-to-many orthology
 - **Modular design**: Can be run via convenient CLI or SLURM array jobs
 - **Centralized configuration**: All parameters in a single YAML file
+- **Polarity divergence analysis**: Compares signed vs. unsigned support to flag potential regulatory polarity changes
 
 ## Quick Start
 
@@ -126,6 +127,25 @@ Located in `results/{tissue}/`:
 - `genes_{tissue}_perennial.txt`
 - `genes_{tissue}_mixed.txt`
 
+### Unsigned Clique Files (diagnostic)
+
+Located in `results/{tissue}/`:
+
+- `coexpressolog_cliques_unsigned_{tissue}_all.tsv`
+- `coexpressolog_cliques_unsigned_{tissue}_annual.tsv`
+- `coexpressolog_cliques_unsigned_{tissue}_perennial.tsv`
+- `coexpressolog_cliques_unsigned_{tissue}_shared.tsv`
+- `genes_unsigned_{tissue}_annual.txt`
+- `genes_unsigned_{tissue}_perennial.txt`
+- `genes_unsigned_{tissue}_mixed.txt`
+
+### Polarity Divergence Outputs
+
+Located in `results/{tissue}/polarity/`:
+
+- `polarity_divergence_<pair_id>.tsv` – Columns: `tissue, pair_id, gene1, gene2, score_signed, score_unsigned, polarity_divergent`
+   - `polarity_divergent = TRUE` when sign differs and unsigned strength > 75th percentile
+
 ### Clique File Columns
 
 - `CliqueID`: Unique identifier (HOG_CliqueNumber)
@@ -156,7 +176,7 @@ RComPlEx/
 │   ├── prepare_single_pair.R        # Pair data preparation
 │   ├── rcomplex_01_load_filter.R    # Step 1: Load & filter data
 │   ├── rcomplex_02_compute_networks.R   # Step 2: Correlation networks
-│   ├── rcomplex_03_network_comparison.R # Step 3: Network comparison
+│   ├── rcomplex_03_network_comparison.R # Step 3: Network comparison (signed & unsigned)
 │   ├── rcomplex_04_summary_stats.R  # Step 4: Summary statistics
 │   └── find_coexpressolog_cliques.R # Clique detection from comparisons
 ├── slurm/
@@ -220,6 +240,8 @@ RComPlEx/
 
 **Output**: `02_networks.RData` (correlation matrices + thresholds)
 
+Additional: `02_networks_unsigned.RData` (MR on absolute correlations) for polarity analysis
+
 ---
 
 #### Step 3: NETWORK_COMPARISON (Conservation Testing)
@@ -265,6 +287,8 @@ RComPlEx/
 **Parallelization**: Processes ortholog pairs in parallel (24 cores)
 
 **Output**: `03_comparison.RData` (p-values, effect sizes, neighborhood statistics)
+
+Additional: `03_<pair_id>_unsigned.RData` (unsigned comparison artifacts)
 
 ---
 
@@ -325,6 +349,8 @@ RComPlEx/
 
 - `coexpressolog_cliques_{tissue}_{habit}.tsv` (4 files: all, annual, perennial, shared)
 - `genes_{tissue}_{habit}.txt` (gene lists for GO/pathway enrichment)
+
+Unsigned path mirrors these outputs with `coexpressolog_cliques_unsigned_*` and `genes_unsigned_*`.
 
 ---
 

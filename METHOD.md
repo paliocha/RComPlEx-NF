@@ -70,7 +70,9 @@ This ensures we capture complete functional modules, not just pairwise connectio
    - Creates sparse network of most important relationships
    - Reduces computational burden and improves signal
 
-**Output**: `02_networks.RData` - Correlation matrices and thresholds for both species
+**Outputs**:
+- `02_networks.RData` (signed path) – MR/CLR-normalized networks and thresholds for both species
+- `02_networks_unsigned.RData` (additional) – MR-normalized networks computed from absolute correlations for polarity analysis
 
 ---
 
@@ -112,7 +114,9 @@ For ortholog pair (geneA_Sp1, geneB_Sp2):
 - **Solution**: Benjamini-Hochberg FDR correction
 - **Threshold**: p < 0.05 after FDR correction
 
-**Output**: `03_comparison.RData` - p-values and effect sizes for each ortholog pair
+**Outputs**:
+- `03_<pair_id>.RData` – signed comparison artifacts (primary path)
+- `03_<pair_id>_unsigned.RData` – unsigned comparison artifacts (optional path)
 
 ---
 
@@ -165,7 +169,27 @@ For ortholog pair (geneA_Sp1, geneB_Sp2):
    - Stratified TSV files by clique type
    - Gene lists for downstream analysis (pathway enrichment, etc.)
 
-**Output**: `coexpressolog_cliques_*.tsv`, `genes_*.txt`
+**Outputs (signed path)**: `coexpressolog_cliques_*.tsv`, `genes_*.txt`
+
+### Step 6b: Unsigned Clique Detection (FIND_CLIQUES_UNSIGNED)
+Uses unsigned comparison artifacts (`03_*_unsigned.RData`) to produce unsigned cliques and gene lists in parallel with the signed path. These are intended for diagnostic comparison, not as replacements for the main signed analysis.
+
+**Outputs (unsigned path)**: `coexpressolog_cliques_unsigned_*.tsv`, `genes_unsigned_*.txt`
+
+### Step 7: Polarity Divergence (POLARITY_DIVERGENCE)
+Pairs the signed and unsigned comparison artifacts per tissue and species pair to flag edges whose polarity diverges.
+
+Conceptually, polarity divergence highlights cases where a gene pair has strong unsigned support (i.e., correlation magnitude) but differs in sign relative to the signed network, indicating potential regulatory rewiring or inversion of regulatory effect.
+
+Operationally, per pair we:
+- Extract edge lists from signed and unsigned comparison outputs
+- Inner-join by `(gene1, gene2)`
+- Compute `sign_match = sign(score_signed) == sign(score_unsigned)`
+- Compute `strength_unsigned = abs(score_unsigned)`
+- Flag `polarity_divergent = (!sign_match) & (strength_unsigned > Q3)` where `Q3` is the 75th percentile of unsigned strengths (robust thresholding)
+
+**Output**: `${outdir}/${tissue}/polarity/polarity_divergence_<pair_id>.tsv`
+Columns: `tissue, pair_id, gene1, gene2, score_signed, score_unsigned, polarity_divergent`
 
 ---
 
@@ -215,6 +239,12 @@ For ortholog pair (geneA_Sp1, geneB_Sp2):
   - Makes correlations comparable across species
   - Focuses on consistency of relationship ranking
   - Reduces spurious correlations from single outliers
+
+#### Signed vs Unsigned MR
+- **Signed MR (primary path)**: Uses the correlation matrix as configured; retains signs when `cor_sign: ""`.
+- **Unsigned MR (auxiliary path)**: Computes MR on `abs(correlations)` to capture magnitude irrespective of sign.
+
+Note: If `cor_sign: "abs"` is set in the configuration, signed networks become unsigned in practice. For polarity analysis to be informative, prefer `cor_sign: ""` (retain signs) so signed vs unsigned comparisons reflect genuine polarity differences.
 
 ### Why FDR Correction?
 - Testing ~10,000 ortholog pairs per species pair

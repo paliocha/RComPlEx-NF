@@ -148,6 +148,17 @@ For each species pair within each tissue (PARALLEL PROCESSING):
   │         Successes = genes co-expressed in focal species
   │         Sample size = neighborhood size in query species
   │       Tests: Is the overlap significantly greater than random?
+
+  ├─→ RCOMPLEX_03_NETWORK_COMPARISON_UNSIGNED (CHAINED INPUT, OPTIONAL)
+        ├─ Script: scripts/rcomplex_03_network_comparison.R (flag: --unsigned TRUE)
+        ├─ CPUs: 12 (retry: 24) | Memory: 150 GB (retry: 300 GB) | Time: 24h
+        ├─ Label: Dynamically allocated (high compute)
+        ├─ Input: 01_filtered_data.RData + 02_networks_unsigned.RData
+        ├─ Output: 03_<pair_id>_unsigned.RData
+        ├─ Purpose:
+        │   Diagnostic path to assess magnitude-based support irrespective of sign
+        └─ Notes:
+            Feeds unsigned clique detection and polarity divergence analysis
   │
   └─→ RCOMPLEX_04_SUMMARY_STATS (CHAINED INPUT)
         ├─ Script: scripts/rcomplex_04_summary_stats.R
@@ -229,6 +240,31 @@ After all species pairs complete for each tissue (SYNCHRONIZATION POINT):
   │         - genes_{tissue}_annual.txt (gene lists for GO enrichment)
   │         - genes_{tissue}_perennial.txt
   │         - genes_{tissue}_mixed.txt
+  │
+  ├─→ FIND_CLIQUES_UNSIGNED (UNSIGNED PATH)
+  │     ├─ Script: scripts/find_coexpressolog_cliques.R
+  │     ├─ CPUs: 12 | Memory: 220 GB | Time: 2d
+  │     ├─ Label: very_high_mem
+  │     ├─ Input: ALL 03_<pair_id>_unsigned.RData files for tissue
+  │     ├─ Purpose:
+  │     │   Produce magnitude-based unsigned cliques and gene lists for comparison
+  │     └─ Outputs:
+  │         - coexpressolog_cliques_unsigned_{tissue}_all.tsv
+  │         - coexpressolog_cliques_unsigned_{tissue}_annual.tsv
+  │         - coexpressolog_cliques_unsigned_{tissue}_perennial.tsv
+  │         - coexpressolog_cliques_unsigned_{tissue}_shared.tsv
+  │         - genes_unsigned_{tissue}_annual.txt
+  │         - genes_unsigned_{tissue}_perennial.txt
+  │         - genes_unsigned_{tissue}_mixed.txt
+  │
+  ├─→ POLARITY_DIVERGENCE
+  │     ├─ Script: scripts/polarity_divergence_report.R
+  │     ├─ CPUs: 4 | Memory: 32 GB | Time: 4h
+  │     ├─ Label: low_mem
+  │     ├─ Input: Paired signed vs unsigned comparison artifacts (joined by tissue and pair_id)
+  │     ├─ Purpose:
+  │     │   Flag edges with polarity mismatch but strong unsigned support (Q3 threshold)
+  │     └─ Output: results/{tissue}/polarity/polarity_divergence_<pair_id>.tsv
   │
   │     Clique Detection Algorithm:
   │       • igraph::max_cliques() - finds all maximal complete subgraphs
@@ -384,6 +420,9 @@ Final results location:
     ├── coexpressolog_cliques_{tissue}_annual.tsv
     ├── coexpressolog_cliques_{tissue}_perennial.tsv
     ├── coexpressolog_cliques_{tissue}_shared.tsv
+    ├── coexpressolog_cliques_unsigned_{tissue}_*.tsv
+    ├── genes_unsigned_{tissue}_*.txt
+    ├── {tissue}/polarity/polarity_divergence_<pair_id>.tsv
     └── pipeline_summary.txt
 
 ═══════════════════════════════════════════════════════════════════════════════
