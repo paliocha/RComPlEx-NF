@@ -535,8 +535,8 @@ workflow {
     // Polarity divergence: pair signed and unsigned comparison per pair and tissue
     divergence_input = RCOMPLEX_03_NETWORK_COMPARISON.out.comparison
         .join(RCOMPLEX_03_NETWORK_COMPARISON_UNSIGNED.out.comparison_unsigned)
-        .map { tissue, pair_id, signed_cmp, _tissue2, _pair_id2, unsigned_cmp -> tuple(tissue, pair_id, signed_cmp, unsigned_cmp) }
-
+        // join returns [tissue, pair_id, signed_cmp, unsigned_cmp] - no need to remap
+    
     POLARITY_DIVERGENCE(divergence_input)
 
     // 5. Generate summary report
