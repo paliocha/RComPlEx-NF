@@ -28,7 +28,7 @@ From: rocker/tidyverse:4.5.2
 
     Installed Packages:
       - tidyverse, igraph, WGCNA, furrr, future, gplots, RColorBrewer
-      - cowplot, DT, matrixStats, Rfast, optparse, yaml, glue
+      - cowplot, DT, matrixStats, Rfast, influential, optparse, yaml, glue
 
     Contact: martin.paliocha@nmbu.no
 
@@ -100,7 +100,8 @@ From: rocker/tidyverse:4.5.2
             'yaml',            # YAML configuration file parsing
             'glue',            # String interpolation
             'matrixStats',     # Fast matrix functions
-            'Rfast'            # High-performance computations (Tcrossprod)
+            'Rfast',           # High-performance computations (Tcrossprod)
+            'influential'      # Fast correlation and mutual rank analysis
         )
 
         # Optional/large packages that may require additional dependencies
@@ -180,7 +181,7 @@ From: rocker/tidyverse:4.5.2
     R --slave -e "
         # Essential packages that MUST be present
         essential <- c('tidyverse', 'igraph', 'furrr', 'future', 'gplots', 'data.table',
-                      'RColorBrewer', 'cowplot', 'DT', 'optparse', 'yaml', 'glue', 'matrixStats', 'Rfast')
+                      'RColorBrewer', 'cowplot', 'DT', 'optparse', 'yaml', 'glue', 'matrixStats', 'Rfast', 'influential')
 
         # Optional packages
         optional <- c('WGCNA')

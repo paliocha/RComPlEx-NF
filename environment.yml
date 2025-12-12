@@ -12,6 +12,7 @@ dependencies:
   - r-igraph           # Network/graph analysis (core for RComPlEx)
   - r-future           # Evaluation framework for parallel processing
   - r-furrr            # Parallel functional programming
+  - r-influential      # Fast mutual rankings computation
   
   # Plotting and visualization
   - r-gplots           # Extended plotting functions
