@@ -58,7 +58,8 @@ joined <- signed_edges %>% inner_join(unsigned_edges, by=c("gene1","gene2"), suf
 
 # Classify polarity divergence: sign differs but unsigned strong
 joined <- joined %>% mutate(
-  sign_match = sign(score_signed) == sign(score_unsigned_signed <- score_signed),
+  # Check if signs match between signed and unsigned scores
+  sign_match = sign(score_signed) == sign(score_unsigned),
   # unsigned score uses absolute strength
   strength_unsigned = abs(score_unsigned),
   polarity_divergent = (!sign_match) & (strength_unsigned > quantile(strength_unsigned, 0.75, na.rm=TRUE))

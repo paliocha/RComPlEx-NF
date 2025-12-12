@@ -248,6 +248,10 @@ if (norm_method == "CLR") {
   species1_genes <- rownames(species1_net)
   species2_genes <- rownames(species2_net)
 
+  # Store original correlations for unsigned MR computation
+  species1_cor_original <- species1_net
+  species2_cor_original <- species2_net
+
   # Species 1: Fast ranking + vectorized MR with Rfast
   cat("Ranking and computing MR for", species1_name, "...\n")
   # Signed MR (ranks on current matrix)
@@ -271,9 +275,9 @@ if (norm_method == "CLR") {
   # Also compute UNSIGNED MR (ranks on absolute correlations) for polarity analysis
   cat("Computing UNSIGNED MR for polarity divergence analysis...\n")
   
-  # Create unsigned networks from absolute correlations
-  species1_net_unsigned <- abs(species1_net)
-  species2_net_unsigned <- abs(species2_net)
+  # Create unsigned networks from absolute correlations BEFORE MR transformation
+  species1_net_unsigned <- abs(species1_cor_original)
+  species2_net_unsigned <- abs(species2_cor_original)
   
   R1u <- Rfast::rowRanks(species1_net_unsigned, method = "average", parallel = TRUE, cores = n_cores)
   species1_net_unsigned <- sqrt(Rfast::Tcrossprod(R1u, R1u))
@@ -287,6 +291,14 @@ if (norm_method == "CLR") {
   rownames(species2_net_unsigned) <- species2_genes
   colnames(species2_net_unsigned) <- species2_genes
   rm(R2u)
+  gc(verbose = FALSE)
+
+  # Remove diagonals from unsigned networks
+  diag(species1_net_unsigned) <- 0
+  diag(species2_net_unsigned) <- 0
+
+  # Clean up original correlation matrices
+  rm(species1_cor_original, species2_cor_original)
   gc(verbose = FALSE)
 
   norm_elapsed <- as.numeric(difftime(Sys.time(), norm_start, units = "secs"))
@@ -311,6 +323,15 @@ species2_thr <- R[round(density_thr * length(R))]
 cat("  ", species2_name, "threshold at", format(density_thr * 100), "% density:",
     format(species2_thr, digits = 3), "\n", sep = "")
 
+# Compute thresholds for unsigned networks (if they exist)
+if (exists("species1_net_unsigned")) {
+  R <- sort(species1_net_unsigned[upper.tri(species1_net_unsigned, diag = FALSE)], decreasing = TRUE)
+  species1_thr_unsigned <- R[round(density_thr * length(R))]
+  
+  R <- sort(species2_net_unsigned[upper.tri(species2_net_unsigned, diag = FALSE)], decreasing = TRUE)
+  species2_thr_unsigned <- R[round(density_thr * length(R))]
+}
+
 rm(R)
 gc(verbose = FALSE)
 
@@ -328,11 +349,14 @@ save(species1_net, species2_net, species1_thr, species2_thr,
      file = output_file)
 
 # Save unsigned MR networks for polarity analysis (additional output)
-output_file_unsigned <- file.path(opt$outdir, "02_networks_unsigned.RData")
-cat("Saving unsigned MR networks to:", output_file_unsigned, "\n")
-save(species1_net_unsigned, species2_net_unsigned,
-  species1_name, species2_name,
-  file = output_file_unsigned)
+if (exists("species1_net_unsigned")) {
+  output_file_unsigned <- file.path(opt$outdir, "02_networks_unsigned.RData")
+  cat("Saving unsigned MR networks to:", output_file_unsigned, "\n")
+  save(species1_net_unsigned, species2_net_unsigned,
+       species1_thr_unsigned, species2_thr_unsigned,
+       species1_name, species2_name,
+       file = output_file_unsigned)
+}
 
 cat("\n")
 cat(rep("=", 80), "\n", sep = "")
