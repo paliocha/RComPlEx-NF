@@ -205,20 +205,12 @@ gc(verbose = FALSE)
 cor_elapsed <- as.numeric(difftime(Sys.time(), cor_start, units = "secs"))
 cat("✓ Correlation computation completed in", round(cor_elapsed, 1), "seconds\n\n")
 
-# Preserve a copy for unsigned analysis
-species1_net_unsigned <- NULL
-species2_net_unsigned <- NULL
-
-# Apply sign correction (unsigned analysis uses absolute correlations)
+# Apply sign correction
 if (cor_sign == "abs") {
   cat("Applying absolute value to correlations...\n")
   species1_net <- abs(species1_net)
   species2_net <- abs(species2_net)
 }
-
-# Always compute an unsigned view for polarity divergence analysis
-species1_net_unsigned <- abs(species1_net)
-species2_net_unsigned <- abs(species2_net)
 
 # NORMALIZATION
 # =============
@@ -278,6 +270,11 @@ if (norm_method == "CLR") {
 
   # Also compute UNSIGNED MR (ranks on absolute correlations) for polarity analysis
   cat("Computing UNSIGNED MR for polarity divergence analysis...\n")
+  
+  # Create unsigned networks from absolute correlations
+  species1_net_unsigned <- abs(species1_net)
+  species2_net_unsigned <- abs(species2_net)
+  
   R1u <- Rfast::rowRanks(species1_net_unsigned, method = "average", parallel = TRUE, cores = n_cores)
   species1_net_unsigned <- sqrt(Rfast::Tcrossprod(R1u, R1u))
   rownames(species1_net_unsigned) <- species1_genes
