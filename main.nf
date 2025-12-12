@@ -318,6 +318,72 @@ process FIND_CLIQUES {
     """
 }
 
+process FIND_CLIQUES_UNSIGNED {
+    label 'very_high_mem'
+    tag "${tissue}"
+    cache 'lenient'
+    publishDir "${params.outdir}/${tissue}", mode: 'move'
+    
+    input:
+    tuple val(tissue), path(comparison_files_unsigned)
+
+    output:
+    tuple val(tissue), path('coexpressolog_cliques_unsigned_*.tsv'), emit: cliques_unsigned
+    tuple val(tissue), path('genes_unsigned_*.txt'), emit: gene_lists_unsigned
+
+    script:
+    """
+    #!/bin/bash
+    set -e
+
+    mkdir -p rcomplex_results/${tissue}/results_unsigned
+    for file in 03_*_unsigned.RData; do
+        pair_id=${file#03_}
+        pair_id=${pair_id%_unsigned.RData}
+        pair_dir="rcomplex_results/${tissue}/results_unsigned/${pair_id}"
+        mkdir -p "$pair_dir"
+        ln -s "$(realpath $file)" "$pair_dir/03_comparison_unsigned.RData"
+    done
+
+    Rscript "${projectDir}/scripts/find_coexpressolog_cliques.R" \
+        --tissue ${tissue} \
+        --config "${projectDir}/config/pipeline_config.yaml" \
+        --workdir "${params.workdir}" \
+        --outdir . \
+        --results_dir rcomplex_results/${tissue}/results_unsigned
+
+    if [ -d "${tissue}" ]; then
+        mv ${tissue}/* .
+        rmdir ${tissue}
+    fi
+    """
+}
+
+process POLARITY_DIVERGENCE {
+    label 'low_mem'
+    tag "${tissue}:${pair_id}"
+    cache 'lenient'
+    publishDir "${params.outdir}/${tissue}/polarity", mode: 'copy', overwrite: true
+
+    input:
+    tuple val(tissue), val(pair_id), path(signed_cmp), path(unsigned_cmp)
+
+    output:
+    tuple val(tissue), val(pair_id), path("polarity_divergence_${pair_id}.tsv"), emit: divergence_report
+
+    script:
+    """
+    #!/bin/bash
+    set -e
+
+    Rscript "${projectDir}/scripts/polarity_divergence_report.R" \
+        --tissue ${tissue} \
+        --pair_id ${pair_id} \
+        --signed ${signed_cmp} \
+        --unsigned ${unsigned_cmp} \
+        --outdir .
+    """
+}
 process SUMMARY_REPORT {
     label 'medium_mem'
     tag "report"
@@ -460,7 +526,18 @@ workflow {
     FIND_CLIQUES(cliques_input)
 
     // Optionally, we could wire unsigned comparison files to a separate clique analysis
-    // For now, we keep unsigned outputs available for downstream exploration without changing final outputs
+    unsigned_cliques_input = RCOMPLEX_03_NETWORK_COMPARISON_UNSIGNED.out.comparison_unsigned
+        .map { tissue, _pair_id, comparison_file -> tuple(tissue, comparison_file) }
+        .groupTuple()
+
+    FIND_CLIQUES_UNSIGNED(unsigned_cliques_input)
+
+    // Polarity divergence: pair signed and unsigned comparison per pair and tissue
+    divergence_input = RCOMPLEX_03_NETWORK_COMPARISON.out.comparison
+        .join(RCOMPLEX_03_NETWORK_COMPARISON_UNSIGNED.out.comparison_unsigned)
+        .map { tissue, pair_id, signed_cmp, _tissue2, _pair_id2, unsigned_cmp -> tuple(tissue, pair_id, signed_cmp, unsigned_cmp) }
+
+    POLARITY_DIVERGENCE(divergence_input)
 
     // 5. Generate summary report
     all_cliques = FIND_CLIQUES.out.cliques
