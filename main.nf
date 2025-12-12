@@ -532,11 +532,15 @@ workflow {
 
     FIND_CLIQUES_UNSIGNED(unsigned_cliques_input)
 
-    // Polarity divergence: pair signed and unsigned comparison per pair and tissue
+    // Polarity divergence: join signed and unsigned comparisons by (tissue, pair_id)
     divergence_input = RCOMPLEX_03_NETWORK_COMPARISON.out.comparison
-        .join(RCOMPLEX_03_NETWORK_COMPARISON_UNSIGNED.out.comparison_unsigned)
-        // join returns [tissue, pair_id, signed_cmp, unsigned_cmp] - no need to remap
-    
+        .map { tissue, pair_id, signed_cmp -> tuple([tissue, pair_id], signed_cmp) }
+        .join(
+            RCOMPLEX_03_NETWORK_COMPARISON_UNSIGNED.out.comparison_unsigned
+                .map { tissue, pair_id, unsigned_cmp -> tuple([tissue, pair_id], unsigned_cmp) }
+        )
+        .map { key, signed_cmp, unsigned_cmp -> tuple(key[0], key[1], signed_cmp, unsigned_cmp) }
+
     POLARITY_DIVERGENCE(divergence_input)
 
     // 5. Generate summary report
