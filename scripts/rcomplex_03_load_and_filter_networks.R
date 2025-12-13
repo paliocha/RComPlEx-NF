@@ -97,8 +97,8 @@ species1_genes_in_pair <- unique(ortho$Species1)
 species2_genes_in_pair <- unique(ortho$Species2)
 
 cat("  Orthologs in this pair:\n")
-cat("    ", opt$species1, ":", length(species1_genes_in_pair), "genes\n", sep = "")
-cat("    ", opt$species2, ":", length(species2_genes_in_pair), "genes\n\n", sep = "")
+cat("    ", opt$species1, ":", length(species1_genes_in_pair), "genes\n")
+cat("    ", opt$species2, ":", length(species2_genes_in_pair), "genes\n\n")
 
 # Clean up pair expression data (not needed)
 rm(species1_expr, species2_expr)
@@ -148,12 +148,12 @@ cat("Filtering signed networks to pair orthologs...\n")
 
 # Filter species1 network
 genes_to_keep_1 <- intersect(species1_genes_full, species1_genes_in_pair)
-cat("  ", opt$species1, ": keeping", length(genes_to_keep_1), "of", length(species1_genes_full), "genes\n", sep = "")
+cat("  ", opt$species1, ": keeping", length(genes_to_keep_1), "of", length(species1_genes_full), "genes\n")
 species1_net_signed <- species1_net_signed[genes_to_keep_1, genes_to_keep_1, drop = FALSE]
 
 # Filter species2 network
 genes_to_keep_2 <- intersect(species2_genes_full, species2_genes_in_pair)
-cat("  ", opt$species2, ": keeping", length(genes_to_keep_2), "of", length(species2_genes_full), "genes\n\n", sep = "")
+cat("  ", opt$species2, ": keeping", length(genes_to_keep_2), "of", length(species2_genes_full), "genes\n\n")
 species2_net_signed <- species2_net_signed[genes_to_keep_2, genes_to_keep_2, drop = FALSE]
 
 # ==============================================================================
@@ -297,11 +297,11 @@ if (have_unsigned) {
   cat("Filtering unsigned networks to pair orthologs...\n")
 
   genes_to_keep_1u <- intersect(species1_genes_full_u, species1_genes_in_pair)
-  cat("  ", opt$species1, ": keeping", length(genes_to_keep_1u), "of", length(species1_genes_full_u), "genes\n", sep = "")
+  cat("  ", opt$species1, ": keeping", length(genes_to_keep_1u), "of", length(species1_genes_full_u), "genes\n")
   species1_net_unsigned <- species1_net_unsigned[genes_to_keep_1u, genes_to_keep_1u, drop = FALSE]
 
   genes_to_keep_2u <- intersect(species2_genes_full_u, species2_genes_in_pair)
-  cat("  ", opt$species2, ": keeping", length(genes_to_keep_2u), "of", length(species2_genes_full_u), "genes\n\n", sep = "")
+  cat("  ", opt$species2, ": keeping", length(genes_to_keep_2u), "of", length(species2_genes_full_u), "genes\n\n")
   species2_net_unsigned <- species2_net_unsigned[genes_to_keep_2u, genes_to_keep_2u, drop = FALSE]
 
   # ==============================================================================
