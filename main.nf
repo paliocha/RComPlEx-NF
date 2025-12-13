@@ -172,7 +172,10 @@ process RCOMPLEX_03_LOAD_AND_FILTER_NETWORKS {
 
     input:
     tuple val(tissue), val(pair_id), val(species1), val(species2), path(step1_dir),
-          path(net1_signed), path(net2_signed), path(net1_unsigned), path(net2_unsigned)
+          path(net1_signed, stageAs: 'sp1_net_signed.RData'), 
+          path(net2_signed, stageAs: 'sp2_net_signed.RData'), 
+          path(net1_unsigned, stageAs: 'sp1_net_unsigned.RData'), 
+          path(net2_unsigned, stageAs: 'sp2_net_unsigned.RData')
 
     output:
     tuple val(tissue), val(pair_id), path("02_networks_signed.RData"), emit: networks_signed
