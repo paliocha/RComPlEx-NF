@@ -34,8 +34,7 @@ For each tissue (root, leaf):
   │
   ├─→ PREPARE_PAIR (parallelized for each species pair)
   │     ├─ Script: scripts/prepare_single_pair.R
-  │     ├─ CPUs: 2 | Memory: 8 GB | Time: 15m | MaxForks: 20
-  │     ├─ Label: low_mem
+  │     ├─ CPUs: 2 | Memory: 8 GB | Time: 15m | MaxForks: 20 | Label: low_mem
   │     ├─ Input: vst_hog.RDS (expression), N1_clean.RDS (orthologs)
   │     ├─ Actions:
   │     │   - Extract tissue-specific expression data for species pair
@@ -44,65 +43,47 @@ For each tissue (root, leaf):
   │     ├─ Output: species1_expr.txt, species2_expr.txt, orthologs.RData
   │     └─ Publishes to: rcomplex_data/{tissue}/pairs/{pair_id}/
   │
-  └─→ All pairs prepared independently in parallel
-
-For each species pair within each tissue (PARALLEL PROCESSING):
+  ├─→ RCOMPLEX_02_COMPUTE_SPECIES_NETWORKS (per species–tissue, runs once and reused)
+  │     ├─ Script: scripts/rcomplex_02_compute_species_network.R
+  │     ├─ CPUs: 24 (retry: 36) | Memory: 100 GB (retry: 200/350 GB) | Time: 24h
+  │     ├─ MaxForks: 13 | MaxRetries: 3 | Label: high_mem
+  │     ├─ Container: RComPlEx.sif (R 4.5.2 + Rfast for fast correlation)
+  │     ├─ Biological Purpose:
+  │     │   Build co-expression networks per species–tissue once, then reuse across pairs
+  │     ├─ Actions:
+  │     │   - Filter expression to genes that have an ortholog in any other species (ortholog-wide universe; matches original RComPlEx intent)
+  │     │   - Calculate pairwise correlations (Spearman/Pearson)
+  │     │   - Normalize: MR or CLR; apply density threshold (default top 3%)
+  │     │   - Compute thresholds for signed and unsigned networks (unsigned for polarity)
+  │     └─ Saves: 02_network_signed.RData, 02_network_unsigned.RData, species gene list
   │
-  ├─→ RCOMPLEX_01_LOAD_FILTER
+  ├─→ RCOMPLEX_01_LOAD_FILTER (per pair)
   │     ├─ Script: scripts/rcomplex_01_load_filter.R
-  │     ├─ CPUs: 2 | Memory: 8 GB | Time: 15m | MaxForks: 20
-  │     ├─ Label: low_mem
-  │     ├─ Container: RComPlEx.sif (R 4.5.2 + tidyverse + igraph)
+  │     ├─ CPUs: 2 | Memory: 8 GB | Time: 15m | MaxForks: 20 | Label: low_mem
   │     ├─ Input: Data from PREPARE_PAIR
   │     ├─ Output: 01_filtered_data.RData
-  │     ├─ Biological Purpose:
-  │     │   Load and quality-filter expression data for co-expression analysis
   │     ├─ Actions:
-  │     │   - Load expression matrices from both species
-  │     │   - Load ortholog group mappings (HOGs)
-  │     │   - Filter: Keep only orthologs where BOTH genes are expressed
+  │     │   - Load expression and orthologs for the pair
+  │     │   - Keep only orthologs where BOTH genes are expressed
   │     │   - Validate data consistency (no missing genes)
-  │     └─ Saves: ortho (ortholog table), species1_expr, species2_expr,
-  │               species names for downstream analysis
   │
-  ├─→ RCOMPLEX_02_COMPUTE_NETWORKS (CHAINED INPUT)
-  │     ├─ Script: scripts/rcomplex_02_compute_networks.R
-  │     ├─ CPUs: 24 (retry: 48) | Memory: 200 GB (retry: 400 GB) | Time: 24h
-  │     ├─ MaxForks: 10 | MaxRetries: 2
-  │     ├─ Label: Dynamically allocated (high compute)
-  │     ├─ Container: RComPlEx.sif (R 4.5.2 + Rfast for fast correlation)
-  │     ├─ Error Strategy: Retry on OOM (exit 137)
-  │     ├─ Input: 01_filtered_data.RData
-  │     ├─ Output: 02_networks.RData
-  │     ├─ Biological Purpose:
-  │     │   Build co-expression networks identifying genes with correlated
-  │     │   expression patterns (co-regulated genes, functional modules)
+  ├─→ RCOMPLEX_03_LOAD_AND_FILTER_NETWORKS (pair-specific filtering of precomputed nets)
+  │     ├─ Script: scripts/rcomplex_03_load_and_filter_networks.R
+  │     ├─ CPUs: 2 | Memory: 32 GB | Time: 2h | MaxForks: 20 | Label: low_mem
+  │     ├─ Input: 01_filtered_data.RData + species network files (signed/unsigned)
   │     ├─ Actions:
-  │     │   - Calculate pairwise correlations (Spearman/Pearson) between all genes
-  │     │   - Parallel processing: 2 species computed simultaneously
-  │     │   - Normalization: MR (Mutual Rank) or CLR (Context Likelihood)
-  │     │     • MR: Bidirectional ranking reduces spurious correlations
-  │     │     • Makes correlation strengths comparable across species
-  │     │   - Apply density threshold (default: top 3% of correlations)
-  │     │     • Creates sparse network of strongest co-expression
-  │     │     • Reduces noise and computational burden
-  │     │   - Compute correlation thresholds for network edge definition
-  │     └─ Saves: species1_net, species2_net (correlation matrices),
-  │               species1_thr, species2_thr (density thresholds)
+  │     │   - Load precomputed species networks for both species in the pair
+  │     │   - Subset matrices to the pair’s shared ortholog genes
+  │     │   - Emit filtered signed and unsigned networks for comparison
   │
-  │     Statistical Method:
-  │       • Spearman correlation: Robust to outliers, detects monotonic relationships
-  │       • Mutual Rank normalization: rank(gene_i → gene_j) × rank(gene_j → gene_i)
-  │       • Bidirectional ranking ensures mutual co-expression strength
-  │
-  ├─→ RCOMPLEX_03_NETWORK_COMPARISON (CHAINED INPUT) **CORE INNOVATION**
+  ├─→ RCOMPLEX_04_NETWORK_COMPARISON (CHAINED INPUT) **CORE INNOVATION**
   │     ├─ Script: scripts/rcomplex_03_network_comparison.R
   │     ├─ CPUs: 12 (retry: 24) | Memory: 150 GB (retry: 300 GB) | Time: 24h
   │     ├─ MaxForks: 10 | MaxRetries: 2
   │     ├─ Label: Dynamically allocated (high compute)
   │     ├─ Container: RComPlEx.sif (R 4.5.2 + furrr for parallel processing)
   │     ├─ Error Strategy: Retry on OOM (exit 137)
-  │     ├─ Input: 01_filtered_data.RData + 02_networks.RData
+  │     ├─ Input: Filtered signed networks from RCOMPLEX_03_LOAD_AND_FILTER_NETWORKS
   │     ├─ Output: 03_comparison.RData (03_{pair_id}.RData)
   │     ├─ Biological Purpose:
   │     │   TEST WHETHER CO-EXPRESSION RELATIONSHIPS ARE CONSERVED BETWEEN SPECIES
@@ -149,18 +130,18 @@ For each species pair within each tissue (PARALLEL PROCESSING):
   │         Sample size = neighborhood size in query species
   │       Tests: Is the overlap significantly greater than random?
 
-  ├─→ RCOMPLEX_03_NETWORK_COMPARISON_UNSIGNED (CHAINED INPUT, OPTIONAL)
-        ├─ Script: scripts/rcomplex_03_network_comparison.R (flag: --unsigned TRUE)
-        ├─ CPUs: 12 (retry: 24) | Memory: 150 GB (retry: 300 GB) | Time: 24h
-        ├─ Label: Dynamically allocated (high compute)
-        ├─ Input: 01_filtered_data.RData + 02_networks_unsigned.RData
-        ├─ Output: 03_<pair_id>_unsigned.RData
+    ├─→ RCOMPLEX_04_NETWORK_COMPARISON_UNSIGNED (CHAINED INPUT, OPTIONAL)
+      ├─ Script: scripts/rcomplex_03_network_comparison.R (flag: --unsigned TRUE)
+      ├─ CPUs: 12 (retry: 24) | Memory: 150 GB (retry: 300 GB) | Time: 24h
+      ├─ Label: Dynamically allocated (high compute)
+      ├─ Input: Filtered unsigned networks from RCOMPLEX_03_LOAD_AND_FILTER_NETWORKS
+      ├─ Output: 03_<pair_id>_unsigned.RData
         ├─ Purpose:
         │   Diagnostic path to assess magnitude-based support irrespective of sign
         └─ Notes:
             Feeds unsigned clique detection and polarity divergence analysis
   │
-  └─→ RCOMPLEX_04_SUMMARY_STATS (CHAINED INPUT)
+  └─→ RCOMPLEX_05_SUMMARY_STATS (CHAINED INPUT)
         ├─ Script: scripts/rcomplex_04_summary_stats.R
         ├─ CPUs: 4 | Memory: 16 GB | Time: 1h | MaxForks: 15
         ├─ Label: medium_mem
@@ -317,15 +298,17 @@ DEPENDENCY CHAIN
 RESOURCE ALLOCATION SUMMARY
 ═══════════════════════════════════════════════════════════════════════════════
 
-Process                        CPUs    Memory    Time    MaxForks  Retries
-────────────────────────────────────────────────────────────────────────────────
-PREPARE_PAIR                   2       8 GB      15m     20        -
-RCOMPLEX_01_LOAD_FILTER        2       8 GB      15m     20        -
-RCOMPLEX_02_COMPUTE_NETWORKS   24→48   200→400GB 24h     10        2
-RCOMPLEX_03_NETWORK_COMPARISON 12→24   150→300GB 24h     10        2
-RCOMPLEX_04_SUMMARY_STATS      4       16 GB     1h      15        -
-FIND_CLIQUES                   12      280 GB    2d      4         -
-SUMMARY_REPORT                 2       500 GB    24h     8         -
+Process                                  CPUs    Memory      Time    MaxForks  Retries
+──────────────────────────────────────────────────────────────────────────────────────
+PREPARE_PAIR                             2       8 GB        15m     20        -
+RCOMPLEX_01_LOAD_FILTER                  2       8 GB        15m     20        -
+RCOMPLEX_02_COMPUTE_SPECIES_NETWORKS     24→36   100→350 GB   24h     13        3
+RCOMPLEX_03_LOAD_AND_FILTER_NETWORKS     2       32 GB       2h      20        -
+RCOMPLEX_04_NETWORK_COMPARISON           12→24   150→300 GB  24h     10        2
+RCOMPLEX_04_NETWORK_COMPARISON_UNSIGNED  12→24   150→300 GB  24h     10        2
+RCOMPLEX_05_SUMMARY_STATS                4       16 GB       1h      15        -
+FIND_CLIQUES                             12      280 GB      2d      4         -
+SUMMARY_REPORT                           2       500 GB      24h     8         -
 
 Resource Labels:
   - low_mem:       2 CPUs, 8 GB, 30m, maxForks=30

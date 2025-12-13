@@ -84,7 +84,7 @@ process PREPARE_PAIR {
     tuple val(tissue), val(sp1), val(sp2)
 
     output:
-    tuple val(tissue), val("${sp1}_${sp2}"), emit: pair_id
+    tuple val(tissue), val("${sp1}_${sp2}"), val(sp1), val(sp2), emit: pair_id
     path "*.RData", emit: data_files
     path "*.txt", emit: expr_files
     path "config.R", emit: config_file
@@ -113,17 +113,17 @@ process RCOMPLEX_01_LOAD_FILTER {
     // Resources controlled by config (label 'low_mem')
 
     input:
-    tuple val(tissue), val(pair_id)
+    tuple val(tissue), val(pair_id), val(species1), val(species2)
 
     output:
-    tuple val(tissue), val(pair_id), path("01_filtered_data.RData"), emit: filtered_data
+    tuple val(tissue), val(pair_id), val(species1), val(species2), path("."), emit: filtered_data
 
     script:
     """
     #!/bin/bash
     set -e
 
-    # Step 1: Load and filter data (paths translated at runtime by R scripts, R from container)
+    # Step 1: Load and filter data to shared orthologs
     Rscript "${projectDir}/scripts/rcomplex_01_load_filter.R" \\
         --tissue ${tissue} \\
         --pair_id ${pair_id} \\
@@ -133,47 +133,80 @@ process RCOMPLEX_01_LOAD_FILTER {
     """
 }
 
-process RCOMPLEX_02_COMPUTE_NETWORKS {
+process RCOMPLEX_02_COMPUTE_SPECIES_NETWORKS {
     label 'high_mem'
-    tag "${tissue}:${pair_id}"
-    cache 'lenient'  // Ignore resource changes for caching
+    tag "${tissue}:${species}"
+    cache 'lenient'
     
-    // Resources controlled by config (withName: RCOMPLEX_02_COMPUTE_NETWORKS)
+    // Resources controlled by config - similar to old RCOMPLEX_02 but per species
 
     input:
-    tuple val(tissue), val(pair_id), path(filtered_data)
+    tuple val(tissue), val(species)
 
     output:
-    tuple val(tissue), val(pair_id), path(filtered_data), path("02_networks.RData"), emit: networks
-    tuple val(tissue), val(pair_id), path(filtered_data), path("02_networks_unsigned.RData"), emit: networks_unsigned
+    tuple val(tissue), val(species), path("02_network_signed.RData"), emit: network_signed
+    tuple val(tissue), val(species), path("02_network_unsigned.RData"), emit: network_unsigned, optional: true
 
     script:
     """
     #!/bin/bash
     set -e
 
-    # Step 2: Compute networks (paths translated at runtime by R scripts, R from container)
-    # Using ${task.cpus} CPUs for parallel computation
-    Rscript "${projectDir}/scripts/rcomplex_02_compute_networks.R" \\
+    # Step 2: Compute species co-expression network
+    Rscript "${projectDir}/scripts/rcomplex_02_compute_species_network.R" \\
         --tissue ${tissue} \\
-        --pair_id ${pair_id} \\
+        --species ${species} \\
         --config "${projectDir}/config/pipeline_config.yaml" \\
         --workdir "${params.workdir}" \\
-        --indir . \\
         --outdir . \\
         --cores ${task.cpus}
     """
 }
 
-process RCOMPLEX_03_NETWORK_COMPARISON {
+process RCOMPLEX_03_LOAD_AND_FILTER_NETWORKS {
+    label 'low_mem'
+    tag "${tissue}:${pair_id}"
+    cache 'lenient'
+    
+    // Lightweight process - just loads and filters pre-computed matrices
+
+    input:
+    tuple val(tissue), val(pair_id), val(species1), val(species2), path(step1_dir),
+          path(net1_signed), path(net2_signed), path(net1_unsigned), path(net2_unsigned)
+
+    output:
+    tuple val(tissue), val(pair_id), path("02_networks_signed.RData"), emit: networks_signed
+    tuple val(tissue), val(pair_id), path("02_networks_unsigned.RData"), emit: networks_unsigned
+
+    script:
+    """
+    #!/bin/bash
+    set -e
+
+    # Step 3: Load pre-computed networks and filter to pair orthologs
+    Rscript "${projectDir}/scripts/rcomplex_03_load_and_filter_networks.R" \\
+        --tissue ${tissue} \\
+        --pair_id ${pair_id} \\
+        --species1 ${species1} \\
+        --species2 ${species2} \\
+        --net1_signed ${net1_signed} \\
+        --net2_signed ${net2_signed} \\
+        --net1_unsigned ${net1_unsigned} \\
+        --net2_unsigned ${net2_unsigned} \\
+        --indir ${step1_dir} \\
+        --outdir .
+    """
+}
+
+process RCOMPLEX_04_NETWORK_COMPARISON {
     label 'high_mem'
     tag "${tissue}:${pair_id}"
     cache 'lenient'  // Ignore resource changes for caching
     
-    // Resources controlled by config (withName: RCOMPLEX_03_NETWORK_COMPARISON)
+    // Resources controlled by config (withName: RCOMPLEX_04_NETWORK_COMPARISON)
 
     input:
-    tuple val(tissue), val(pair_id), path(filtered_data), path(networks)
+    tuple val(tissue), val(pair_id), path(networks)
 
     output:
     tuple val(tissue), val(pair_id), path("03_${pair_id}.RData"), emit: comparison
@@ -183,8 +216,7 @@ process RCOMPLEX_03_NETWORK_COMPARISON {
     #!/bin/bash
     set -e
 
-    # Step 3: Network comparison (paths translated at runtime by R scripts, R from container)
-    # Using ${task.cpus} CPUs for parallel ortholog comparison
+    # Step 4: Network comparison (formerly Step 3)
     Rscript "${projectDir}/scripts/rcomplex_03_network_comparison.R" \\
         --tissue ${tissue} \\
         --pair_id ${pair_id} \\
@@ -196,16 +228,16 @@ process RCOMPLEX_03_NETWORK_COMPARISON {
     """
 }
 
-// Optional unsigned comparison consuming unsigned MR networks
-process RCOMPLEX_03_NETWORK_COMPARISON_UNSIGNED {
+// Unsigned comparison consuming unsigned MR networks
+process RCOMPLEX_04_NETWORK_COMPARISON_UNSIGNED {
     label 'high_mem'
     tag "${tissue}:${pair_id}"
     cache 'lenient'  // Ignore resource changes for caching
     
-    // Resources controlled by config (withName: RCOMPLEX_03_NETWORK_COMPARISON_UNSIGNED)
+    // Resources controlled by config (withName: RCOMPLEX_04_NETWORK_COMPARISON_UNSIGNED)
 
     input:
-    tuple val(tissue), val(pair_id), path(filtered_data), path(networks_unsigned)
+    tuple val(tissue), val(pair_id), path(networks_unsigned)
 
     output:
     tuple val(tissue), val(pair_id), path("03_${pair_id}_unsigned.RData"), emit: comparison_unsigned
@@ -229,7 +261,7 @@ process RCOMPLEX_03_NETWORK_COMPARISON_UNSIGNED {
     """
 }
 
-process RCOMPLEX_04_SUMMARY_STATS {
+process RCOMPLEX_05_SUMMARY_STATS {
     label 'low_mem'
     tag "${tissue}:${pair_id}"
     cache 'lenient'  // Ignore resource changes for caching
@@ -480,17 +512,38 @@ workflow {
         it.replaceAll(' ', '_')  // Convert "Brachypodium distachyon" -> "Brachypodium_distachyon"
     }
 
-    // Create channel from tissues list - use Groovy-style iteration
+    // ========================================================================
+    // REFACTORED ARCHITECTURE: Per-species network computation
+    // ========================================================================
+
+    // Step 1: Create species-tissue tuples for network computation
+    species_tissue_tuples = Channel.fromList(tissues_list).flatMap { tissue ->
+        def species_tissues = []
+        all_species.each { species ->
+            species_tissues << tuple(tissue, species)
+        }
+
+        if (params.test_mode) {
+            log.info "TEST MODE: Limiting ${tissue} to first 5 species (of ${species_tissues.size()} total)"
+            return species_tissues.take(5)
+        } else {
+            log.info "Will compute networks for ${species_tissues.size()} species-tissue combinations"
+            return species_tissues
+        }
+    }
+
+    // Step 2: Compute co-expression networks once per species-tissue
+    RCOMPLEX_02_COMPUTE_SPECIES_NETWORKS(species_tissue_tuples)
+
+    // Step 3: Create pair tuples for comparisons
     pair_tuples = Channel.fromList(tissues_list).flatMap { tissue ->
         def all_pairs = []
-        // Generate all unique species pairs using Groovy range syntax
         (0..<all_species.size()).each { i ->
             ((i+1)..<all_species.size()).each { j ->
                 all_pairs << tuple(tissue, all_species[i], all_species[j])
             }
         }
 
-        // In test mode, limit to first 3 pairs per tissue
         if (params.test_mode) {
             log.info "TEST MODE: Limiting ${tissue} to first 3 pairs (of ${all_pairs.size()} total)"
             return all_pairs.take(3)
@@ -500,43 +553,79 @@ workflow {
         }
     }
 
-    // Process each pair in parallel
+    // Step 4: Prepare pair-specific orthologs
     PREPARE_PAIR(pair_tuples)
 
-    // Run RComPlEx in modular steps for each pair
-    // Step 1: Load and filter data
+    // Step 5: Load and filter data to shared orthologs
     RCOMPLEX_01_LOAD_FILTER(PREPARE_PAIR.out.pair_id)
 
-    // Step 2: Compute co-expression networks
-    RCOMPLEX_02_COMPUTE_NETWORKS(RCOMPLEX_01_LOAD_FILTER.out.filtered_data)
+    // Step 6: Load pre-computed networks and filter to pair orthologs
+    // Join signed networks with pair metadata
+    species_nets_signed = RCOMPLEX_02_COMPUTE_SPECIES_NETWORKS.out.network_signed
+        .map { tissue, species, net_file -> tuple([tissue, species], net_file) }
 
-    // Step 3: Perform network comparisons
-    RCOMPLEX_03_NETWORK_COMPARISON(RCOMPLEX_02_COMPUTE_NETWORKS.out.networks)
-    RCOMPLEX_03_NETWORK_COMPARISON_UNSIGNED(RCOMPLEX_02_COMPUTE_NETWORKS.out.networks_unsigned)
+    pair_with_nets_signed = RCOMPLEX_01_LOAD_FILTER.out.filtered_data
+        .map { tissue, pair_id, species1, species2, step1_dir ->
+            tuple([tissue, species1], [tissue, species2], tissue, pair_id, species1, species2, step1_dir)
+        }
+        .combine(species_nets_signed, by: 0)  // Join on [tissue, species1]
+        .map { key1, key2, tissue, pair_id, species1, species2, step1_dir, net1_signed ->
+            tuple(key2, tissue, pair_id, species1, species2, step1_dir, net1_signed)
+        }
+        .combine(species_nets_signed, by: 0)  // Join on [tissue, species2]
+        .map { key2, tissue, pair_id, species1, species2, step1_dir, net1_signed, net2_signed ->
+            tuple(tissue, pair_id, species1, species2, step1_dir, net1_signed, net2_signed)
+        }
 
-    // Step 4: Generate summary statistics and plots
-    RCOMPLEX_04_SUMMARY_STATS(RCOMPLEX_03_NETWORK_COMPARISON.out.comparison)
+    // Join unsigned networks similarly
+    species_nets_unsigned = RCOMPLEX_02_COMPUTE_SPECIES_NETWORKS.out.network_unsigned
+        .map { tissue, species, net_file -> tuple([tissue, species], net_file) }
 
-    // Step 5: Collect all comparison RData files and find cliques
-    // Use the comparison files directly, not summaries
-    cliques_input = RCOMPLEX_03_NETWORK_COMPARISON.out.comparison
+    pair_with_nets_unsigned = RCOMPLEX_01_LOAD_FILTER.out.filtered_data
+        .map { tissue, pair_id, species1, species2, step1_dir ->
+            tuple([tissue, species1], [tissue, species2], tissue, pair_id, species1, species2, step1_dir)
+        }
+        .combine(species_nets_unsigned, by: 0)
+        .map { key1, key2, tissue, pair_id, species1, species2, step1_dir, net1_unsigned ->
+            tuple(key2, tissue, pair_id, species1, species2, step1_dir, net1_unsigned)
+        }
+        .combine(species_nets_unsigned, by: 0)
+        .map { key2, tissue, pair_id, species1, species2, step1_dir, net1_unsigned, net2_unsigned ->
+            tuple(tissue, pair_id, species1, species2, step1_dir, net1_unsigned, net2_unsigned)
+        }
+
+    RCOMPLEX_03_LOAD_AND_FILTER_NETWORKS(
+        pair_with_nets_signed.join(pair_with_nets_unsigned, by: [0, 1, 2, 3, 4])
+            .map { tissue, pair_id, species1, species2, step1_dir, net1_s, net2_s, net1_u, net2_u ->
+                tuple(tissue, pair_id, species1, species2, step1_dir, net1_s, net2_s, net1_u, net2_u)
+            }
+    )
+
+    // Step 7: Perform network comparisons (formerly Step 3)
+    RCOMPLEX_04_NETWORK_COMPARISON(RCOMPLEX_03_LOAD_AND_FILTER_NETWORKS.out.networks_signed)
+    RCOMPLEX_04_NETWORK_COMPARISON_UNSIGNED(RCOMPLEX_03_LOAD_AND_FILTER_NETWORKS.out.networks_unsigned)
+
+    // Step 8: Generate summary statistics and plots (formerly Step 4)
+    RCOMPLEX_05_SUMMARY_STATS(RCOMPLEX_04_NETWORK_COMPARISON.out.comparison)
+
+    // Step 9: Collect all comparison RData files and find cliques (formerly Step 5)
+    cliques_input = RCOMPLEX_04_NETWORK_COMPARISON.out.comparison
         .map { tissue, _pair_id, comparison_file -> tuple(tissue, comparison_file) }
         .groupTuple()
 
     FIND_CLIQUES(cliques_input)
 
-    // Optionally, we could wire unsigned comparison files to a separate clique analysis
-    unsigned_cliques_input = RCOMPLEX_03_NETWORK_COMPARISON_UNSIGNED.out.comparison_unsigned
+    unsigned_cliques_input = RCOMPLEX_04_NETWORK_COMPARISON_UNSIGNED.out.comparison_unsigned
         .map { tissue, _pair_id, comparison_file -> tuple(tissue, comparison_file) }
         .groupTuple()
 
     FIND_CLIQUES_UNSIGNED(unsigned_cliques_input)
 
-    // Polarity divergence: join signed and unsigned comparisons by (tissue, pair_id)
-    divergence_input = RCOMPLEX_03_NETWORK_COMPARISON.out.comparison
+    // Step 10: Polarity divergence (formerly Step 6)
+    divergence_input = RCOMPLEX_04_NETWORK_COMPARISON.out.comparison
         .map { tissue, pair_id, signed_cmp -> tuple([tissue, pair_id], signed_cmp) }
         .join(
-            RCOMPLEX_03_NETWORK_COMPARISON_UNSIGNED.out.comparison_unsigned
+            RCOMPLEX_04_NETWORK_COMPARISON_UNSIGNED.out.comparison_unsigned
                 .map { tissue, pair_id, unsigned_cmp -> tuple([tissue, pair_id], unsigned_cmp) }
         )
         .map { key, signed_cmp, unsigned_cmp -> tuple(key[0], key[1], signed_cmp, unsigned_cmp) }

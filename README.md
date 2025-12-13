@@ -216,7 +216,7 @@ RComPlEx/
 
 ---
 
-#### Step 2: COMPUTE_NETWORKS (Co-Expression Discovery)
+#### Step 2: COMPUTE_SPECIES_NETWORKS (Co-Expression Discovery)
 
 **Purpose**: Build gene co-expression networks for each species
 
@@ -225,6 +225,7 @@ RComPlEx/
 1. **Correlation calculation**: 
    - Spearman correlation (default) - robust to outliers, detects monotonic relationships
    - Computes all pairwise gene correlations (gene × gene matrix)
+   - Gene universe is limited to genes that have an ortholog in any other species (ortholog-wide filter applied before correlations)
 
 2. **Mutual Rank normalization**:
    - Ranks correlations bidirectionally: gene_i → gene_j AND gene_j → gene_i  

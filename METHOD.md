@@ -50,7 +50,7 @@ This ensures we capture complete functional modules, not just pairwise connectio
 
 ---
 
-### Step 3: Compute Co-Expression Networks (RCOMPLEX_02_COMPUTE_NETWORKS)
+### Step 3: Compute Co-Expression Networks (RCOMPLEX_02_COMPUTE_SPECIES_NETWORKS)
 
 **Input**: Filtered expression data
 
@@ -59,6 +59,7 @@ This ensures we capture complete functional modules, not just pairwise connectio
 1. **Calculate Correlations**
    - Method: Spearman correlation (default; Pearson/Kendall available)
    - Why Spearman: Robust to outliers, preserves monotonic relationships
+   - Gene universe: Only genes that have an ortholog in any other species (pre-filters expression before correlation)
 
 2. **Normalize Using Mutual Rank (MR)**
    - Each gene's correlations ranked from strongest to weakest
