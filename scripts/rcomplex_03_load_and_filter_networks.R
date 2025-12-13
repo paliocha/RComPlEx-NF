@@ -254,8 +254,9 @@ species2_thr_signed <- sp2_pair_thr_signed
 
 rm(sp1_edges_signed, sp2_edges_signed, sp1_edges_sorted, sp2_edges_sorted,
    species1_genes_full, species2_genes_full, genes_to_keep_1, genes_to_keep_2,
-   n_edges_sp1, n_edges_sp2, n_full_edges_sp1, n_full_edges_sp2, target_density,
+   n_edges_sp1, n_edges_sp2, n_full_edges_sp1, n_full_edges_sp2,
    sp1_pair_thr_signed, sp2_pair_thr_signed)
+if (exists("target_density")) rm(target_density)
 gc(verbose = FALSE)
 
 # ==============================================================================
@@ -361,8 +362,9 @@ if (have_unsigned) {
   # Clean up
   rm(species1_genes_full_u, species2_genes_full_u, genes_to_keep_1u, genes_to_keep_2u,
      sp1_edges_unsigned, sp2_edges_unsigned, sp1_edges_sorted_u, sp2_edges_sorted_u,
-     n_edges_sp1_u, n_edges_sp2_u, target_density_u,
+     n_edges_sp1_u, n_edges_sp2_u,
      sp1_pair_thr_unsigned, sp2_pair_thr_unsigned)
+  if (exists("target_density_u")) rm(target_density_u)
   gc(verbose = FALSE)
 }
 
