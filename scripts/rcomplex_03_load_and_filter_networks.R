@@ -92,9 +92,9 @@ if (!file.exists(input_file)) {
 
 load(input_file)  # loads: ortho, species1_expr, species2_expr, species1_name, species2_name
 
-# Extract gene IDs from ortholog table
-species1_genes_in_pair <- unique(ortho[[opt$species1]])
-species2_genes_in_pair <- unique(ortho[[opt$species2]])
+# Extract gene IDs from ortholog table (ortho has columns: Species1, Species2, OrthoGroup)
+species1_genes_in_pair <- unique(ortho$Species1)
+species2_genes_in_pair <- unique(ortho$Species2)
 
 cat("  Orthologs in this pair:\n")
 cat("    ", opt$species1, ":", length(species1_genes_in_pair), "genes\n", sep = "")
