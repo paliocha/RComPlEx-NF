@@ -383,7 +383,7 @@ species1_name <- opt$species1
 species2_name <- opt$species2
 save(species1_net_signed, species2_net_signed,
      species1_thr_signed, species2_thr_signed,
-     species1_name, species2_name, shared_ortho_hogs,
+     species1_name, species2_name, ortho,
      file = output_file_signed)
 
 # Save unsigned networks if available
@@ -392,7 +392,7 @@ if (have_unsigned) {
   cat("Saving unsigned networks to:", output_file_unsigned, "\n")
   save(species1_net_unsigned, species2_net_unsigned,
        species1_thr_unsigned, species2_thr_unsigned,
-       species1_name, species2_name, shared_ortho_hogs,
+       species1_name, species2_name, ortho,
        file = output_file_unsigned)
 }
 
