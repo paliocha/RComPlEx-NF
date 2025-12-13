@@ -186,6 +186,9 @@ process RCOMPLEX_03_LOAD_AND_FILTER_NETWORKS {
     #!/bin/bash
     set -e
 
+    # Extract directory path (step1_dir is the RData file, but script needs the directory)
+    indir_path=\$(dirname "${step1_dir}")
+
     # Step 3: Load pre-computed networks and filter to pair orthologs
     Rscript "${projectDir}/scripts/rcomplex_03_load_and_filter_networks.R" \\
         --tissue ${tissue} \\
@@ -196,7 +199,7 @@ process RCOMPLEX_03_LOAD_AND_FILTER_NETWORKS {
         --net2_signed ${net2_signed} \\
         --net1_unsigned ${net1_unsigned} \\
         --net2_unsigned ${net2_unsigned} \\
-        --indir ${step1_dir} \\
+        --indir "\${indir_path}" \\
         --outdir .
     """
 }
