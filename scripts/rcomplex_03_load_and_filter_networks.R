@@ -222,7 +222,7 @@ sp2_pair_thr_signed <- species2_thr_signed
 if (sp1_pair_thr_signed > max(sp1_edges_signed, na.rm = TRUE)) {
   # Threshold too high for pair subnetwork; use proportional density
   target_density <- round(0.03 * n_edges_sp1)  # Default 3% density
-  if (target_density > 0) {
+  if (target_density > 0 && target_density <= length(sp1_edges_sorted)) {
     sp1_pair_thr_signed <- sp1_edges_sorted[target_density]
   } else {
     sp1_pair_thr_signed <- max(sp1_edges_signed, na.rm = TRUE)
@@ -236,7 +236,7 @@ if (sp1_pair_thr_signed > max(sp1_edges_signed, na.rm = TRUE)) {
 
 if (sp2_pair_thr_signed > max(sp2_edges_signed, na.rm = TRUE)) {
   target_density <- round(0.03 * n_edges_sp2)
-  if (target_density > 0) {
+  if (target_density > 0 && target_density <= length(sp2_edges_sorted)) {
     sp2_pair_thr_signed <- sp2_edges_sorted[target_density]
   } else {
     sp2_pair_thr_signed <- max(sp2_edges_signed, na.rm = TRUE)
@@ -329,7 +329,7 @@ if (have_unsigned) {
 
   if (sp1_pair_thr_unsigned > max(sp1_edges_unsigned, na.rm = TRUE)) {
     target_density_u <- round(0.03 * n_edges_sp1_u)
-    if (target_density_u > 0) {
+    if (target_density_u > 0 && target_density_u <= length(sp1_edges_sorted_u)) {
       sp1_pair_thr_unsigned <- sp1_edges_sorted_u[target_density_u]
     } else {
       sp1_pair_thr_unsigned <- max(sp1_edges_unsigned, na.rm = TRUE)
@@ -343,7 +343,7 @@ if (have_unsigned) {
 
   if (sp2_pair_thr_unsigned > max(sp2_edges_unsigned, na.rm = TRUE)) {
     target_density_u <- round(0.03 * n_edges_sp2_u)
-    if (target_density_u > 0) {
+    if (target_density_u > 0 && target_density_u <= length(sp2_edges_sorted_u)) {
       sp2_pair_thr_unsigned <- sp2_edges_sorted_u[target_density_u]
     } else {
       sp2_pair_thr_unsigned <- max(sp2_edges_unsigned, na.rm = TRUE)
