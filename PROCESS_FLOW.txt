@@ -73,8 +73,13 @@ For each tissue (root, leaf):
   │     ├─ Input: 01_filtered_data.RData + species network files (signed/unsigned)
   │     ├─ Actions:
   │     │   - Load precomputed species networks for both species in the pair
-  │     │   - Subset matrices to the pair’s shared ortholog genes
-  │     │   - Emit filtered signed and unsigned networks for comparison
+  │     │   - Subset matrices to the pair's shared ortholog genes
+  │     │   - [OPTION B] Recalibrate density thresholds for pair-specific subnetworks:
+  │     │       * Check if ortholog-wide threshold applies to pair-specific genes
+  │     │       * If threshold exceeds pair max edge, recompute to maintain ~3% density
+  │     │       * Ensures consistent network sparsity across heterogeneous pair sizes
+  │     │   - Emit filtered signed and unsigned networks with calibrated thresholds
+  │     │   - Output: 02_networks_signed.RData, 02_networks_unsigned.RData
   │
   ├─→ RCOMPLEX_04_NETWORK_COMPARISON (CHAINED INPUT) **CORE INNOVATION**
   │     ├─ Script: scripts/rcomplex_03_network_comparison.R

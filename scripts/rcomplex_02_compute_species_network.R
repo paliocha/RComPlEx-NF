@@ -114,6 +114,9 @@ if (!file.exists(vst_file)) {
 cat("Loading expression data from:", vst_file, "\n")
 vst <- readRDS(vst_file)
 
+# Normalize species names to underscores to match pipeline inputs
+vst <- vst %>% mutate(species = str_replace(species, " ", "_"))
+
 # Filter to this species and tissue
 cat("Filtering to species:", opt$species, "and tissue:", opt$tissue, "\n")
 species_expr <- vst %>%
@@ -131,6 +134,8 @@ if (!file.exists(n1_file)) {
 }
 
 n1 <- readRDS(n1_file)
+# Normalize species names in ortholog table for consistent matching
+n1 <- n1 %>% mutate(species = str_replace(species, " ", "_"))
 genes_with_ortholog <- unique(n1$GeneID[n1$species == opt$species])
 
 cat("  Genes with orthologs for", opt$species, ":", length(genes_with_ortholog), "\n")

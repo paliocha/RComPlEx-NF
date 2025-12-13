@@ -72,8 +72,55 @@ This ensures we capture complete functional modules, not just pairwise connectio
    - Reduces computational burden and improves signal
 
 **Outputs**:
-- `02_networks.RData` (signed path) – MR/CLR-normalized networks and thresholds for both species
-- `02_networks_unsigned.RData` (additional) – MR-normalized networks computed from absolute correlations for polarity analysis
+- `02_network_signed.RData` (signed path) – MR/CLR-normalized networks and thresholds
+- `02_network_unsigned.RData` (additional) – MR-normalized networks computed from absolute correlations for polarity analysis
+
+---
+
+### Step 3.5: Load & Filter Networks (RCOMPLEX_03_LOAD_AND_FILTER_NETWORKS)
+
+**Input**: Pre-computed species networks, pair-specific ortholog mappings
+
+**Process**:
+
+1. **Load ortholog-wide networks**
+   - Species 1 and Species 2 co-expression matrices from Step 2
+   - Species-wide density thresholds computed at top ~3% of all correlations
+
+2. **Filter to pair-specific gene subsets**
+   - For each pair, extract only genes present in the orthologs
+   - Subset networks to shared ortholog-universe genes
+   - Both signed and unsigned networks filtered identically
+
+3. **Threshold Calibration (Option B)**
+   
+   The implementation uses **Option (B): Per-Pair Network Density Recalibration**
+   
+   - **Problem**: Ortholog-wide threshold may not apply well to pair-specific subnetworks
+     - Example: If 1000 genes in Sp1 globally, but only 500 in pair, threshold rank changes
+   
+   - **Solution**: Dynamically recalibrate threshold for each pair
+     - Check if ortholog-wide threshold exceeds max edge value in pair subnetwork
+     - If so: recompute threshold to maintain ~3% density **within the pair-specific network**
+     - If not: use original threshold (it remains applicable)
+   
+   - **Why this matters**:
+     - Ensures consistent network sparsity across all pair comparisons
+     - Prevents artificial biases from heterogeneous pair sizes
+     - Maintains statistical power for smaller pairs while avoiding noise in larger pairs
+   
+   **Example**:
+   - Species 1 ortholog-wide network: 1000 genes, top 3% = 14,970 edges, threshold = 0.45
+   - Species 1 in pair A: 500 genes, max possible edges = 124,750
+     - Top 3% = 3,743 edges
+     - If original threshold = 0.45, but pair max edge = 0.52, use 0.45
+   - Species 1 in pair B: 50 genes, max possible edges = 1,225  
+     - Top 3% = 37 edges  
+     - If original threshold = 0.45, but pair max edge = 0.30, recalibrate to 0.29 (37th highest edge)
+
+**Output**: 
+- `02_networks_signed.RData` – pair-specific filtered networks with calibrated thresholds
+- `02_networks_unsigned.RData` – pair-specific unsigned networks with calibrated thresholds
 
 ---
 

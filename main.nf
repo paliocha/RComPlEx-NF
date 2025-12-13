@@ -116,7 +116,7 @@ process RCOMPLEX_01_LOAD_FILTER {
     tuple val(tissue), val(pair_id), val(species1), val(species2)
 
     output:
-    tuple val(tissue), val(pair_id), val(species1), val(species2), path("."), emit: filtered_data
+    tuple val(tissue), val(pair_id), val(species1), val(species2), path("01_filtered_data.RData"), emit: filtered_data
 
     script:
     """
@@ -124,11 +124,11 @@ process RCOMPLEX_01_LOAD_FILTER {
     set -e
 
     # Step 1: Load and filter data to shared orthologs
-    Rscript "${projectDir}/scripts/rcomplex_01_load_filter.R" \\
-        --tissue ${tissue} \\
-        --pair_id ${pair_id} \\
-        --config "${projectDir}/config/pipeline_config.yaml" \\
-        --workdir "${params.workdir}" \\
+    Rscript "${projectDir}/scripts/rcomplex_01_load_filter.R" \
+        --tissue ${tissue} \
+        --pair_id ${pair_id} \
+        --config "${projectDir}/config/pipeline_config.yaml" \
+        --workdir "${params.workdir}" \
         --outdir .
     """
 }
