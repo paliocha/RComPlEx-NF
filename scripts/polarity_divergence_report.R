@@ -17,9 +17,15 @@ if (is.null(opt$tissue) || is.null(opt$pair_id) || is.null(opt$signed) || is.nul
   stop("Missing required arguments: --tissue --pair_id --signed --unsigned")
 }
 
-# Load comparison objects; assume they contain lists or matrices with comparable keys
-signed <- get(load(opt$signed))
-unsigned <- get(load(opt$unsigned))
+# Load network objects from RData files
+# Signed networks contain: species1_net_signed, species2_net_signed, species1_thr_signed, species2_thr_signed, species1_name, species2_name, ortho
+load(opt$signed)
+# Unsigned networks contain: species1_net_unsigned, species2_net_unsigned, species1_thr_unsigned, species2_thr_unsigned, species1_name, species2_name, ortho
+load(opt$unsigned)
+
+# Use the network matrices for polarity comparison
+signed <- species1_net_signed
+unsigned <- species1_net_unsigned
 
 # Heuristic: derive edge lists if matrices; otherwise expect data.frames
 extract_edges <- function(obj, mode){
