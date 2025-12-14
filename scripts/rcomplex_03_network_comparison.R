@@ -118,19 +118,31 @@ dir.create(opt$outdir, showWarnings = FALSE, recursive = TRUE)
 
 cat("Loading data from previous steps...\n")
 
-# Load filtered data from step 1
-input_file_1 <- file.path(opt$indir, "01_filtered_data.RData")
-if (!file.exists(input_file_1)) {
-  stop("Step 1 output not found: ", input_file_1)
-}
-load(input_file_1)
+# Load networks from step 3 (includes ortho table, species names, networks, and thresholds)
+# Check for both signed and unsigned versions
+input_file_signed <- file.path(opt$indir, "02_networks_signed.RData")
+input_file_unsigned <- file.path(opt$indir, "02_networks_unsigned.RData")
 
-# Load networks from step 2
-input_file_2 <- file.path(opt$indir, "02_networks.RData")
-if (!file.exists(input_file_2)) {
-  stop("Step 2 output not found: ", input_file_2)
+if (file.exists(input_file_signed)) {
+  cat("  Loading signed networks from:", input_file_signed, "\n")
+  load(input_file_signed)
+  # Rename for consistency with downstream code
+  species1_net <- species1_net_signed
+  species2_net <- species2_net_signed
+  species1_thr <- species1_thr_signed
+  species2_thr <- species2_thr_signed
+} else if (file.exists(input_file_unsigned)) {
+  cat("  Loading unsigned networks from:", input_file_unsigned, "\n")
+  load(input_file_unsigned)
+  # Rename for consistency with downstream code
+  species1_net <- species1_net_unsigned
+  species2_net <- species2_net_unsigned
+  species1_thr <- species1_thr_unsigned
+  species2_thr <- species2_thr_unsigned
+} else {
+  stop("Networks file not found. Expected either:\n  ", 
+       input_file_signed, "\n  or\n  ", input_file_unsigned)
 }
-load(input_file_2)
 
 cat("✓ Data loaded successfully\n\n")
 
