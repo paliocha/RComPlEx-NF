@@ -640,13 +640,14 @@ workflow {
     FIND_CLIQUES_UNSIGNED(unsigned_cliques_input)
 
     // Step 10: Polarity divergence (formerly Step 6)
-    divergence_input = RCOMPLEX_04_NETWORK_COMPARISON.out.comparison
-        .map { tissue, pair_id, signed_cmp -> tuple([tissue, pair_id], signed_cmp) }
+    // Join signed and unsigned network files for polarity comparison
+    divergence_input = RCOMPLEX_03_LOAD_AND_FILTER_NETWORKS.out.networks_signed
+        .map { tissue, pair_id, networks_signed -> tuple([tissue, pair_id], networks_signed) }
         .join(
-            RCOMPLEX_04_NETWORK_COMPARISON_UNSIGNED.out.comparison_unsigned
-                .map { tissue, pair_id, unsigned_cmp -> tuple([tissue, pair_id], unsigned_cmp) }
+            RCOMPLEX_03_LOAD_AND_FILTER_NETWORKS.out.networks_unsigned
+                .map { tissue, pair_id, networks_unsigned -> tuple([tissue, pair_id], networks_unsigned) }
         )
-        .map { key, signed_cmp, unsigned_cmp -> tuple(key[0], key[1], signed_cmp, unsigned_cmp) }
+        .map { key, signed_net, unsigned_net -> tuple(key[0], key[1], signed_net, unsigned_net) }
 
     POLARITY_DIVERGENCE(divergence_input)
 
