@@ -262,8 +262,7 @@ process RCOMPLEX_04_NETWORK_COMPARISON_UNSIGNED {
         --workdir "${params.workdir}" \
         --indir . \
         --outdir . \
-        --cores ${task.cpus} \
-        --unsigned TRUE
+        --cores ${task.cpus}
     """
 }
 
