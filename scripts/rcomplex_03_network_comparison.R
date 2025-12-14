@@ -131,6 +131,7 @@ if (file.exists(input_file_signed)) {
   species2_net <- species2_net_signed
   species1_thr <- species1_thr_signed
   species2_thr <- species2_thr_signed
+  network_type <- "signed"
 } else if (file.exists(input_file_unsigned)) {
   cat("  Loading unsigned networks from:", input_file_unsigned, "\n")
   load(input_file_unsigned)
@@ -139,6 +140,7 @@ if (file.exists(input_file_signed)) {
   species2_net <- species2_net_unsigned
   species1_thr <- species1_thr_unsigned
   species2_thr <- species2_thr_unsigned
+  network_type <- "unsigned"
 } else {
   stop("Networks file not found. Expected either:\n  ", 
        input_file_signed, "\n  or\n  ", input_file_unsigned)
@@ -287,7 +289,9 @@ cat("    -", species2_name, "genes:", length(unique(comparison$Species2)), "\n\n
 # SAVE RESULTS
 # ==============================================================================
 
-output_file <- file.path(opt$outdir, paste0("03_", opt$pair_id, ".RData"))
+# Construct output filename with _unsigned suffix if processing unsigned networks
+output_suffix <- if (network_type == "unsigned") "_unsigned" else ""
+output_file <- file.path(opt$outdir, paste0("03_", opt$pair_id, output_suffix, ".RData"))
 cat("Saving comparison results to:", output_file, "\n")
 save(comparison, species1_thr, species2_thr,
      species1_name, species2_name,
