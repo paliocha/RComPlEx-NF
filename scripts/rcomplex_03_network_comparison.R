@@ -181,9 +181,9 @@ comparison_start <- Sys.time()
 # Set up parallel processing
 plan(multisession, workers = n_cores)
 
-# Pre-compute network dimensions for efficiency
-N1 <- nrow(species1_expr)
-N2 <- nrow(species2_expr)
+# Pre-compute network dimensions for efficiency (total genes per species)
+N1 <- nrow(species1_net)
+N2 <- nrow(species2_net)
 
 cat("Processing", nrow(ortho), "ortholog pairs using", n_cores, "cores\n\n")
 
