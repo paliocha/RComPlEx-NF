@@ -322,7 +322,12 @@ process FIND_CLIQUES {
 
     # Extract pair_id from filename and create corresponding directories
     # Files are named: 03_Sp1_Sp2.RData -> extract pair_id = Sp1_Sp2
+    # Exclude unsigned files (those will be processed by FIND_CLIQUES_UNSIGNED)
     for file in 03_*.RData; do
+        # Skip unsigned files
+        if [[ \$file == *"_unsigned.RData" ]]; then
+            continue
+        fi
         # Extract pair_id: 03_Sp1_Sp2.RData -> Sp1_Sp2
         pair_id=\${file#03_}
         pair_id=\${pair_id%.RData}
@@ -331,8 +336,8 @@ process FIND_CLIQUES {
         ln -s "\$(realpath \$file)" "\$pair_dir/03_comparison.RData"
     done
 
-    # Verify all files were linked correctly
-    n_files=\$(ls 03_*.RData 2>/dev/null | wc -l)
+    # Verify all signed files were linked correctly (exclude unsigned)
+    n_files=\$(ls 03_*.RData 2>/dev/null | grep -v "_unsigned.RData" | wc -l)
     n_dirs=\$(ls rcomplex_results/${tissue}/results/ 2>/dev/null | wc -l)
     if [ \$n_files -ne \$n_dirs ]; then
         echo "ERROR: File count mismatch (files: \$n_files, directories: \$n_dirs)"
@@ -381,6 +386,14 @@ process FIND_CLIQUES_UNSIGNED {
         mkdir -p "\$pair_dir"
         ln -s "\$(realpath \$file)" "\$pair_dir/03_comparison_unsigned.RData"
     done
+
+    # Verify all unsigned files were linked correctly
+    n_files=\$(ls 03_*_unsigned.RData 2>/dev/null | wc -l)
+    n_dirs=\$(ls rcomplex_results/${tissue}/results_unsigned/ 2>/dev/null | wc -l)
+    if [ \$n_files -ne \$n_dirs ]; then
+        echo "ERROR: File count mismatch (files: \$n_files, directories: \$n_dirs)"
+        exit 1
+    fi
 
     Rscript "${projectDir}/scripts/find_coexpressolog_cliques.R" \
         --tissue ${tissue} \
