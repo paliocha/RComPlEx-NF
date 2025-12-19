@@ -297,6 +297,50 @@ process RCOMPLEX_05_SUMMARY_STATS {
     """
 }
 
+process FIND_GROUP_CLIQUES {
+    label 'very_high_mem'
+    tag "${tissue}:${group}"
+    cache 'lenient'
+    publishDir "${params.outdir}/${tissue}/group_cliques", mode: 'copy'
+
+    input:
+    tuple val(tissue), val(group), path(comparison_files)
+
+    output:
+    tuple val(tissue), val(group), path("${group}_cliques_${tissue}.csv"), emit: group_cliques
+
+    script:
+    """
+    #!/bin/bash
+    set -e
+
+    # Create results directory structure
+    mkdir -p rcomplex_results/${tissue}/results
+
+    # Link comparison files (exclude unsigned)
+    for file in 03_*.RData; do
+        if [[ \$file == *"_unsigned.RData" ]]; then
+            continue
+        fi
+        pair_id=\${file#03_}
+        pair_id=\${pair_id%.RData}
+        pair_dir="rcomplex_results/${tissue}/results/\${pair_id}"
+        mkdir -p "\$pair_dir"
+        ln -s "\$(realpath \$file)" "\$pair_dir/03_comparison.RData"
+    done
+
+    # Run group-specific clique detection
+    Rscript "${projectDir}/scripts/find_group_specific_cliques.R" \\
+        --tissue ${tissue} \\
+        --group ${group} \\
+        --group_column life_cycle \\
+        --config "${projectDir}/config/pipeline_config.yaml" \\
+        --workdir "${params.workdir}" \\
+        --outdir . \\
+        --results_dir rcomplex_results/${tissue}/results
+    """
+}
+
 process FIND_CLIQUES {
     label 'very_high_mem'
     tag "${tissue}"
