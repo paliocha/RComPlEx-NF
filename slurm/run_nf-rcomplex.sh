@@ -15,4 +15,4 @@ eval "$(micromamba shell hook --shell bash)"
 module load singularity/rpm
 micromamba activate $HOME/micromamba/envs/Nextflow
 
-nextflow run main.nf --profile slurm -resume
+nextflow run main.nf -profile slurm -resume
