@@ -118,9 +118,9 @@ if (!dir.exists(results_dir)) {
        "\nRun RComPlEx analyses first!")
 }
 
-# Look for 03_comparison.RData files (new format from Nextflow)
+# Look for 03_comparison.RData or 03_comparison_unsigned.RData files (new format from Nextflow)
 comparison_files <- list.files(results_dir,
-                               pattern = "03_comparison\\.RData$",
+                               pattern = "03_comparison(_unsigned)?\\.RData$",
                                recursive = TRUE,
                                full.names = TRUE)
 
