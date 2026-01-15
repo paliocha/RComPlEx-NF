@@ -237,64 +237,99 @@ cat("\n")
 
 # ANNOTATE CLIQUES WITH SPECIES AND LIFE CYCLE INFO ===========================
 cat("Annotating cliques with species and life cycle information...\n")
+cat("  (Optimized vectorized implementation)\n")
 
-cliques_annotated <- hog_cliques %>%
-  rowwise() %>%
+# STEP 1: Pre-create gene info lookup table (single operation)
+cat("  - Building gene info lookup...\n")
+gene_info_lookup <- n1 %>%
+  select(GeneID, species, life_cycle) %>%
+  distinct()
+
+# STEP 2: Pre-index conserved_pairs edges for fast lookup
+cat("  - Indexing conserved pair edges...\n")
+edge_lookup <- conserved_pairs %>%
   mutate(
-    gene_list = list(str_split(Genes, ",")[[1]]),
-    gene_info = list({
-      n1 %>%
-        filter(GeneID %in% gene_list) %>%
-        select(GeneID, species, life_cycle, HOG) %>%
-        distinct()
-    })
+    # Create canonical edge key (sorted species pair + HOG)
+    edge_key = paste(pmin(Species1, Species2), pmax(Species1, Species2), HOG, sep = "___")
   ) %>%
-  ungroup() %>%
-  mutate(
-    # Count annual and perennial species in each clique
-    n_annual_species = map_int(gene_info, ~ n_distinct(.x$species[.x$life_cycle == "annual"])),
-    n_perennial_species = map_int(gene_info, ~ n_distinct(.x$species[.x$life_cycle == "perennial"])),
+  select(edge_key, HOG, Max.p.val, Species1.effect.size, Species2.effect.size)
 
-    # Classify life habit
+# STEP 3: Expand cliques to gene-level (vectorized string split + unnest)
+cat("  - Expanding cliques to gene level...\n")
+cliques_expanded <- hog_cliques %>%
+  mutate(
+    CliqueID = row_number(),
+    gene_list = str_split(Genes, ",")
+  ) %>%
+  unnest(gene_list) %>%
+  rename(GeneID = gene_list)
+
+# STEP 4: Join gene info (single vectorized join instead of per-row filter)
+cat("  - Joining gene annotations...\n")
+cliques_with_info <- cliques_expanded %>%
+  left_join(gene_info_lookup, by = "GeneID")
+
+# STEP 5: Aggregate species/lifecycle stats per clique (vectorized group_by)
+cat("  - Computing species and life cycle statistics...\n")
+clique_species_stats <- cliques_with_info %>%
+  group_by(CliqueID, HOG, CliqueSize, Genes) %>%
+  summarise(
+    n_annual_species = n_distinct(species[life_cycle == "annual"], na.rm = TRUE),
+    n_perennial_species = n_distinct(species[life_cycle == "perennial"], na.rm = TRUE),
+    Species = paste(sort(unique(na.omit(species))), collapse = "; "),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    n_species = n_annual_species + n_perennial_species,
     LifeHabit = case_when(
       n_perennial_species == 0 ~ "Annual",
       n_annual_species == 0 ~ "Perennial",
       TRUE ~ "Mixed"
-    ),
+    )
+  )
 
-    # Get species list
-    Species = map_chr(gene_info, ~ paste(sort(unique(.x$species)), collapse = "; ")),
+# STEP 6: Generate all clique edges and compute stats (vectorized)
+cat("  - Computing edge statistics...\n")
 
-    # Count genes per species
-    n_species = n_annual_species + n_perennial_species,
+# Get unique genes per clique for edge generation
+clique_genes <- cliques_expanded %>%
+  group_by(CliqueID, HOG) %>%
+  summarise(genes = list(GeneID), .groups = "drop")
 
-    # Get statistics from conserved_pairs
-    clique_stats = list({
-      # Get all edges in this clique
-      gene_pairs <- combn(gene_list, 2, simplify = FALSE)
-      edge_stats <- map_dfr(gene_pairs, function(pair) {
-        conserved_pairs %>%
-          filter(HOG == !!HOG,
-                 ((Species1 == pair[1] & Species2 == pair[2]) |
-                  (Species1 == pair[2] & Species2 == pair[1]))) %>%
-          select(Max.p.val, Species1.effect.size, Species2.effect.size)
-      })
+# Generate all edges per clique using parallel processing
+clique_edges <- future_map_dfr(seq_len(nrow(clique_genes)), function(i) {
+  row <- clique_genes[i, ]
+  genes <- row$genes[[1]]
+  
+  if (length(genes) < 2) {
+    return(tibble(CliqueID = row$CliqueID, edge_key = character(0)))
+  }
+  
+  # Generate all pairs
+  pairs <- combn(genes, 2, simplify = FALSE)
+  edge_keys <- map_chr(pairs, ~ paste(sort(.x), collapse = "___"))
+  edge_keys <- paste(edge_keys, row$HOG, sep = "___")
+  
+  tibble(CliqueID = row$CliqueID, edge_key = edge_keys)
+}, .progress = FALSE, .options = furrr_options(seed = TRUE))
 
-      if (nrow(edge_stats) > 0) {
-        tibble(
-          Mean_pval = mean(edge_stats$Max.p.val, na.rm = TRUE),
-          Median_pval = median(edge_stats$Max.p.val, na.rm = TRUE),
-          Mean_effect_size = mean(c(edge_stats$Species1.effect.size,
-                                   edge_stats$Species2.effect.size), na.rm = TRUE),
-          n_edges = nrow(edge_stats)
-        )
-      } else {
-        tibble(Mean_pval = NA, Median_pval = NA, Mean_effect_size = NA, n_edges = 0)
-      }
-    })
-  ) %>%
-  unnest(clique_stats) %>%
-  select(-gene_list, -gene_info) %>%
+# Join with edge lookup to get statistics
+clique_edge_stats <- clique_edges %>%
+  left_join(edge_lookup, by = "edge_key") %>%
+  group_by(CliqueID) %>%
+  summarise(
+    Mean_pval = mean(Max.p.val, na.rm = TRUE),
+    Median_pval = median(Max.p.val, na.rm = TRUE),
+    Mean_effect_size = mean(c(Species1.effect.size, Species2.effect.size), na.rm = TRUE),
+    n_edges = sum(!is.na(Max.p.val)),
+    .groups = "drop"
+  )
+
+# STEP 7: Combine all annotations
+cat("  - Finalizing clique annotations...\n")
+cliques_annotated <- clique_species_stats %>%
+  left_join(clique_edge_stats, by = "CliqueID") %>%
+  select(-CliqueID) %>%
   arrange(desc(CliqueSize), Mean_pval)
 
 cat("  ✓ Annotation complete\n\n")
