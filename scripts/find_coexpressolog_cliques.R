@@ -91,6 +91,8 @@ cat(rep("=", 80), "\n\n", sep = "")
 # SETUP PARALLEL PROCESSING ====================================================
 cat("Setting up parallel processing...\n")
 plan(multisession, workers = config$cliques$parallel_workers)
+# Increase global size limit for large objects in parallel processing
+options(future.globals.maxSize = 2 * 1024^3)  # 2 GB limit
 cat("  ✓ Using", nbrOfWorkers(), "parallel workers\n\n")
 
 # LOAD N1 CLEAN FOR GENE ANNOTATIONS ===========================================
@@ -296,8 +298,10 @@ clique_genes <- cliques_expanded %>%
   group_by(CliqueID, HOG) %>%
   summarise(genes = list(GeneID), .groups = "drop")
 
-# Generate all edges per clique using parallel processing
-clique_edges <- future_map_dfr(seq_len(nrow(clique_genes)), function(i) {
+# Generate all edges per clique using sequential map (faster than parallel for this operation
+# because the data transfer overhead exceeds computation time)
+cat("    - Generating edges for", nrow(clique_genes), "cliques...\n")
+clique_edges <- map_dfr(seq_len(nrow(clique_genes)), function(i) {
   row <- clique_genes[i, ]
   genes <- row$genes[[1]]
   
@@ -311,7 +315,7 @@ clique_edges <- future_map_dfr(seq_len(nrow(clique_genes)), function(i) {
   edge_keys <- paste(edge_keys, row$HOG, sep = "___")
   
   tibble(CliqueID = row$CliqueID, edge_key = edge_keys)
-}, .progress = FALSE, .options = furrr_options(seed = TRUE))
+})
 
 # Join with edge lookup to get statistics
 clique_edge_stats <- clique_edges %>%
