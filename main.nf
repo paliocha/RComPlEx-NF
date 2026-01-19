@@ -450,6 +450,16 @@ process FIND_CLIQUES_UNSIGNED {
         mv ${tissue}/* .
         rmdir ${tissue}
     fi
+
+    # Rename output files to include '_unsigned' suffix for Nextflow output pattern matching
+    for f in coexpressolog_cliques_${tissue}_*.tsv; do
+        newname=\$(echo "\$f" | sed "s/coexpressolog_cliques_${tissue}_/coexpressolog_cliques_unsigned_${tissue}_/")
+        mv "\$f" "\$newname"
+    done
+    for f in genes_${tissue}_*.txt; do
+        newname=\$(echo "\$f" | sed "s/genes_${tissue}_/genes_unsigned_${tissue}_/")
+        mv "\$f" "\$newname"
+    done
     """
 }
 
