@@ -90,10 +90,13 @@ cat(rep("=", 80), "\n\n", sep = "")
 
 # SETUP PARALLEL PROCESSING ====================================================
 cat("Setting up parallel processing...\n")
-plan(multisession, workers = config$cliques$parallel_workers)
+# Reduce workers for memory-intensive clique detection (each worker uses ~100GB+)
+# 4 workers is a good balance between speed and memory on 1TB nodes
+n_workers <- min(config$cliques$parallel_workers, 4)
+plan(multisession, workers = n_workers)
 # Increase global size limit for large objects in parallel processing
 options(future.globals.maxSize = 2 * 1024^3)  # 2 GB limit
-cat("  ✓ Using", nbrOfWorkers(), "parallel workers\n\n")
+cat("  ✓ Using", nbrOfWorkers(), "parallel workers (capped at 4 for memory efficiency)\n\n")
 
 # LOAD N1 CLEAN FOR GENE ANNOTATIONS ===========================================
 cat("Loading gene annotations...\n")
@@ -184,10 +187,19 @@ if (nrow(conserved_pairs) == 0) {
 cat("Finding co-expressolog cliques...\n")
 cat("  (This will take some time, progress bar below)\n\n")
 
-hog_cliques <- conserved_pairs %>%
+# Free up memory before intensive computation
+gc(verbose = FALSE)
+
+# Split HOGs into chunks for better memory management
+hog_groups <- conserved_pairs %>%
   group_by(HOG) %>%
-  group_split() %>%
-  future_map_dfr(function(hog_data) {
+  group_split()
+
+n_hogs <- length(hog_groups)
+cat("  Processing", n_hogs, "HOGs...\n")
+
+# Process with reduced memory footprint using chunked approach
+hog_cliques <- future_map_dfr(hog_groups, function(hog_data) {
 
     hog_id <- hog_data$HOG[1]
 
@@ -205,23 +217,27 @@ hog_cliques <- conserved_pairs %>%
     # Create graph
     g <- graph_from_data_frame(edges, directed = FALSE)
 
-    # Find maximal cliques
-    cliques <- max_cliques(g)
+    # Find maximal cliques with size limits to prevent combinatorial explosion
+    # min = config setting (default 2), max = 13 (total species count)
+    cliques <- max_cliques(g, min = config$cliques$min_clique_size, max = 13L)
 
     if (length(cliques) == 0) {
       return(NULL)
     }
 
-    # Convert to tibble
+    # Convert to tibble (filtering already done by max_cliques min parameter)
     tibble(
       HOG = hog_id,
       CliqueSize = map_int(cliques, length),
       Genes = map_chr(cliques, ~ paste(sort(names(.x)), collapse = ",")),
       CliqueID = paste0(hog_id, "_C", seq_along(cliques))
-    ) %>%
-      filter(CliqueSize >= config$cliques$min_clique_size)
+    )
 
-  }, .progress = TRUE, .options = furrr_options(seed = TRUE))
+  }, .progress = TRUE, .options = furrr_options(seed = TRUE, chunk_size = 100L))
+
+# Clean up
+rm(hog_groups)
+gc(verbose = FALSE)
 
 cat("\n  ✓ Found", nrow(hog_cliques), "cliques across",
     length(unique(hog_cliques$HOG)), "HOGs\n")
