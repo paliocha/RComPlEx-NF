@@ -9,10 +9,11 @@
 suppressPackageStartupMessages({
   library(tidyverse)
   library(igraph)
-  library(furrr)
   library(optparse)
   library(glue)
 })
+
+# NOTE: furrr removed - using serial processing to avoid OOM with large datasets
 
 # Source Orion HPC utilities for path resolution (resolve across work and home mounts)
 orion_utils_candidates <- c(
@@ -88,15 +89,12 @@ cat("Working directory:", getwd(), "\n")
 cat("Configuration:", opt$config, "\n")
 cat(rep("=", 80), "\n\n", sep = "")
 
-# SETUP PARALLEL PROCESSING ====================================================
-cat("Setting up parallel processing...\n")
-# Reduce workers for memory-intensive clique detection (each worker uses ~100GB+)
-# 4 workers is a good balance between speed and memory on 1TB nodes
-n_workers <- min(config$cliques$parallel_workers, 4)
-plan(multisession, workers = n_workers)
-# Increase global size limit for large objects in parallel processing
-options(future.globals.maxSize = 2 * 1024^3)  # 2 GB limit
-cat("  ✓ Using", nbrOfWorkers(), "parallel workers (capped at 4 for memory efficiency)\n\n")
+# SETUP PROCESSING =============================================================
+cat("Setting up processing...\n")
+# SERIAL PROCESSING: Using serial processing to avoid OOM on large datasets (652K+ pairs)
+# Parallel processing with furrr was causing OOM even with 1TB memory and 4 workers
+# Serial processing uses much less memory since only one HOG is in memory at a time
+cat("  ✓ Using serial processing (memory-efficient mode for large datasets)\n\n")
 
 # LOAD N1 CLEAN FOR GENE ANNOTATIONS ===========================================
 cat("Loading gene annotations...\n")
@@ -185,58 +183,83 @@ if (nrow(conserved_pairs) == 0) {
 
 # FIND CLIQUES PER HOG =========================================================
 cat("Finding co-expressolog cliques...\n")
-cat("  (This will take some time, progress bar below)\n\n")
+cat("  (Serial processing - memory efficient but slower)\n\n")
 
 # Free up memory before intensive computation
 gc(verbose = FALSE)
 
-# Split HOGs into chunks for better memory management
-hog_groups <- conserved_pairs %>%
-  group_by(HOG) %>%
-  group_split()
-
-n_hogs <- length(hog_groups)
+# Get unique HOGs
+unique_hogs <- unique(conserved_pairs$HOG)
+n_hogs <- length(unique_hogs)
 cat("  Processing", n_hogs, "HOGs...\n")
 
-# Process with reduced memory footprint using chunked approach
-hog_cliques <- future_map_dfr(hog_groups, function(hog_data) {
+# Pre-allocate results list (more memory efficient than growing a data frame)
+results_list <- vector("list", n_hogs)
+clique_count <- 0
+processed_count <- 0
 
-    hog_id <- hog_data$HOG[1]
+# Progress tracking
+progress_interval <- max(1, n_hogs %/% 20)  # Report every 5%
+start_time <- Sys.time()
 
-    # Build undirected graph: nodes = genes, edges = co-expression
-    edges <- hog_data %>%
-      select(Species1, Species2) %>%
-      distinct()
-
-    genes_in_network <- unique(c(edges$Species1, edges$Species2))
-
-    if (length(genes_in_network) < config$cliques$min_clique_size) {
-      return(NULL)
-    }
-
+# Process HOGs serially to minimize memory usage
+for (i in seq_len(n_hogs)) {
+  hog_id <- unique_hogs[i]
+  
+  # Get data for this HOG only (minimizes memory)
+  hog_data <- conserved_pairs %>% filter(HOG == hog_id)
+  
+  # Build undirected graph: nodes = genes, edges = co-expression
+  edges <- hog_data %>%
+    select(Species1, Species2) %>%
+    distinct()
+  
+  genes_in_network <- unique(c(edges$Species1, edges$Species2))
+  
+  if (length(genes_in_network) >= config$cliques$min_clique_size) {
     # Create graph
     g <- graph_from_data_frame(edges, directed = FALSE)
-
+    
     # Find maximal cliques with size limits to prevent combinatorial explosion
     # min = config setting (default 2), max = 13 (total species count)
     cliques <- max_cliques(g, min = config$cliques$min_clique_size, max = 13L)
-
-    if (length(cliques) == 0) {
-      return(NULL)
+    
+    if (length(cliques) > 0) {
+      # Convert to tibble
+      results_list[[i]] <- tibble(
+        HOG = hog_id,
+        CliqueSize = map_int(cliques, length),
+        Genes = map_chr(cliques, ~ paste(sort(names(.x)), collapse = ",")),
+        CliqueID = paste0(hog_id, "_C", seq_along(cliques))
+      )
+      clique_count <- clique_count + length(cliques)
     }
+    
+    # Clean up graph object
+    rm(g, cliques)
+  }
+  
+  # Clean up HOG data
+  rm(hog_data, edges, genes_in_network)
+  
+  processed_count <- processed_count + 1
+  
+  # Progress report and garbage collection every 5%
+  if (processed_count %% progress_interval == 0 || processed_count == n_hogs) {
+    pct <- round(100 * processed_count / n_hogs)
+    elapsed <- difftime(Sys.time(), start_time, units = "mins")
+    cat(sprintf("  [%3d%%] Processed %d/%d HOGs, found %d cliques (%.1f min elapsed)\n",
+                pct, processed_count, n_hogs, clique_count, as.numeric(elapsed)))
+    gc(verbose = FALSE)
+  }
+}
 
-    # Convert to tibble (filtering already done by max_cliques min parameter)
-    tibble(
-      HOG = hog_id,
-      CliqueSize = map_int(cliques, length),
-      Genes = map_chr(cliques, ~ paste(sort(names(.x)), collapse = ",")),
-      CliqueID = paste0(hog_id, "_C", seq_along(cliques))
-    )
-
-  }, .progress = TRUE, .options = furrr_options(seed = TRUE, chunk_size = 100L))
+# Combine results (remove NULLs first)
+results_list <- results_list[!sapply(results_list, is.null)]
+hog_cliques <- bind_rows(results_list)
 
 # Clean up
-rm(hog_groups)
+rm(results_list, unique_hogs)
 gc(verbose = FALSE)
 
 cat("\n  ✓ Found", nrow(hog_cliques), "cliques across",
