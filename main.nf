@@ -341,6 +341,212 @@ process FIND_GROUP_CLIQUES {
     """
 }
 
+// =============================================================================
+// BATCHED CLIQUE DETECTION PROCESSES
+// =============================================================================
+// The clique detection is split into 3 stages to avoid OOM issues:
+// 1. PREPARE_CLIQUE_DATA: Load all comparisons, group by HOG, create batch files
+// 2. FIND_CLIQUES_BATCH: Process each batch of HOGs in parallel (~500 HOGs/batch)
+// 3. MERGE_ANNOTATE_CLIQUES: Combine results and annotate with species/lifecycle info
+// =============================================================================
+
+process PREPARE_CLIQUE_DATA {
+    label 'high_mem'
+    tag "${tissue}"
+    cache 'lenient'
+    
+    input:
+    tuple val(tissue), path(comparison_files)
+
+    output:
+    tuple val(tissue), path("conserved_pairs_${tissue}.rds"), emit: conserved_pairs
+    tuple val(tissue), path("batch_assignments_${tissue}.rds"), emit: batch_assignments
+    tuple val(tissue), path("batch_ids_${tissue}.txt"), emit: batch_ids
+    tuple val(tissue), path("batch_info_${tissue}.tsv"), emit: batch_info
+
+    script:
+    """
+    #!/bin/bash
+    set -e
+
+    # Create results directory structure matching original layout
+    mkdir -p rcomplex_results/${tissue}/results
+
+    # Link comparison files into expected structure (exclude unsigned)
+    for file in 03_*.RData; do
+        if [[ \$file == *"_unsigned.RData" ]]; then
+            continue
+        fi
+        pair_id=\${file#03_}
+        pair_id=\${pair_id%.RData}
+        pair_dir="rcomplex_results/${tissue}/results/\${pair_id}"
+        mkdir -p "\$pair_dir"
+        ln -s "\$(realpath \$file)" "\$pair_dir/03_comparison.RData"
+    done
+
+    Rscript "${projectDir}/scripts/prepare_clique_data.R" \\
+        --tissue ${tissue} \\
+        --config "${projectDir}/config/pipeline_config.yaml" \\
+        --workdir "${params.workdir}" \\
+        --outdir . \\
+        --results_dir rcomplex_results/${tissue}/results \\
+        --batch_size ${params.clique_batch_size}
+    """
+}
+
+process PREPARE_CLIQUE_DATA_UNSIGNED {
+    label 'high_mem'
+    tag "${tissue}"
+    cache 'lenient'
+    
+    input:
+    tuple val(tissue), path(comparison_files_unsigned)
+
+    output:
+    tuple val(tissue), path("conserved_pairs_${tissue}.rds"), emit: conserved_pairs
+    tuple val(tissue), path("batch_assignments_${tissue}.rds"), emit: batch_assignments
+    tuple val(tissue), path("batch_ids_${tissue}.txt"), emit: batch_ids
+    tuple val(tissue), path("batch_info_${tissue}.tsv"), emit: batch_info
+
+    script:
+    """
+    #!/bin/bash
+    set -e
+
+    mkdir -p rcomplex_results/${tissue}/results_unsigned
+    for file in 03_*_unsigned.RData; do
+        pair_id=\${file#03_}
+        pair_id=\${pair_id%_unsigned.RData}
+        pair_dir="rcomplex_results/${tissue}/results_unsigned/\${pair_id}"
+        mkdir -p "\$pair_dir"
+        ln -s "\$(realpath \$file)" "\$pair_dir/03_comparison_unsigned.RData"
+    done
+
+    Rscript "${projectDir}/scripts/prepare_clique_data.R" \\
+        --tissue ${tissue} \\
+        --config "${projectDir}/config/pipeline_config.yaml" \\
+        --workdir "${params.workdir}" \\
+        --outdir . \\
+        --results_dir rcomplex_results/${tissue}/results_unsigned \\
+        --batch_size ${params.clique_batch_size}
+    """
+}
+
+process FIND_CLIQUES_BATCH {
+    label 'medium_mem'
+    tag "${tissue}:batch${batch_id}"
+    cache 'lenient'
+    
+    input:
+    tuple val(tissue), val(batch_id), path(conserved_pairs), path(batch_assignments)
+
+    output:
+    tuple val(tissue), path("cliques_${tissue}_signed_batch*.rds"), emit: batch_cliques
+
+    script:
+    """
+    #!/bin/bash
+    set -e
+
+    Rscript "${projectDir}/scripts/find_cliques_batch.R" \\
+        --tissue ${tissue} \\
+        --batch_id ${batch_id} \\
+        --pairs_file ${conserved_pairs} \\
+        --batch_assignments ${batch_assignments} \\
+        --outdir . \\
+        --signed TRUE
+    """
+}
+
+process FIND_CLIQUES_BATCH_UNSIGNED {
+    label 'medium_mem'
+    tag "${tissue}:batch${batch_id}"
+    cache 'lenient'
+    
+    input:
+    tuple val(tissue), val(batch_id), path(conserved_pairs), path(batch_assignments)
+
+    output:
+    tuple val(tissue), path("cliques_${tissue}_unsigned_batch*.rds"), emit: batch_cliques
+
+    script:
+    """
+    #!/bin/bash
+    set -e
+
+    Rscript "${projectDir}/scripts/find_cliques_batch.R" \\
+        --tissue ${tissue} \\
+        --batch_id ${batch_id} \\
+        --pairs_file ${conserved_pairs} \\
+        --batch_assignments ${batch_assignments} \\
+        --outdir . \\
+        --signed FALSE
+    """
+}
+
+process MERGE_ANNOTATE_CLIQUES {
+    label 'medium_mem'
+    tag "${tissue}"
+    cache 'lenient'
+    publishDir "${params.outdir}/${tissue}", mode: 'copy'
+    
+    input:
+    tuple val(tissue), path(batch_files)
+
+    output:
+    tuple val(tissue), path('cliques.rds'), emit: cliques_rds
+    tuple val(tissue), path('cliques.csv'), emit: cliques_csv
+    tuple val(tissue), path('cliques_*.csv'), emit: cliques_by_lifehabit, optional: true
+
+    script:
+    """
+    #!/bin/bash
+    set -e
+
+    Rscript "${projectDir}/scripts/merge_annotate_cliques.R" \\
+        --tissue ${tissue} \\
+        --config "${projectDir}/config/pipeline_config.yaml" \\
+        --workdir "${params.workdir}" \\
+        --input_dir . \\
+        --outdir . \\
+        --signed TRUE
+    """
+}
+
+process MERGE_ANNOTATE_CLIQUES_UNSIGNED {
+    label 'medium_mem'
+    tag "${tissue}"
+    cache 'lenient'
+    publishDir "${params.outdir}/${tissue}", mode: 'copy'
+    
+    input:
+    tuple val(tissue), path(batch_files)
+
+    output:
+    tuple val(tissue), path('cliques_unsigned.rds'), emit: cliques_unsigned_rds
+    tuple val(tissue), path('cliques_unsigned.csv'), emit: cliques_unsigned_csv
+    tuple val(tissue), path('cliques_unsigned_*.csv'), emit: cliques_unsigned_by_lifehabit, optional: true
+
+    script:
+    """
+    #!/bin/bash
+    set -e
+
+    Rscript "${projectDir}/scripts/merge_annotate_cliques.R" \\
+        --tissue ${tissue} \\
+        --config "${projectDir}/config/pipeline_config.yaml" \\
+        --workdir "${params.workdir}" \\
+        --input_dir . \\
+        --outdir . \\
+        --signed FALSE
+    """
+}
+
+// LEGACY MONOLITHIC PROCESSES (kept for reference/fallback)
+// These can be used for small datasets or testing
+// Uncomment and modify workflow if needed
+
+/*
 process FIND_CLIQUES {
     label 'very_high_mem'
     tag "${tissue}"
@@ -403,7 +609,9 @@ process FIND_CLIQUES {
     fi
     """
 }
+*/
 
+/*
 process FIND_CLIQUES_UNSIGNED {
     label 'very_high_mem'
     tag "${tissue}"
@@ -462,6 +670,7 @@ process FIND_CLIQUES_UNSIGNED {
     done
     """
 }
+*/
 
 process POLARITY_DIVERGENCE {
     label 'low_mem'
@@ -680,18 +889,76 @@ workflow {
     // Step 8: Generate summary statistics and plots (formerly Step 4)
     RCOMPLEX_05_SUMMARY_STATS(RCOMPLEX_04_NETWORK_COMPARISON.out.comparison)
 
-    // Step 9: Collect all comparison RData files and find cliques (formerly Step 5)
+    // Step 9: BATCHED CLIQUE DETECTION
+    // Stage 1: Prepare clique data (load comparisons, group by HOG, create batches)
     cliques_input = RCOMPLEX_04_NETWORK_COMPARISON.out.comparison
         .map { tissue, _pair_id, comparison_file -> tuple(tissue, comparison_file) }
         .groupTuple()
 
-    FIND_CLIQUES(cliques_input)
+    PREPARE_CLIQUE_DATA(cliques_input)
 
     unsigned_cliques_input = RCOMPLEX_04_NETWORK_COMPARISON_UNSIGNED.out.comparison_unsigned
         .map { tissue, _pair_id, comparison_file -> tuple(tissue, comparison_file) }
         .groupTuple()
 
-    FIND_CLIQUES_UNSIGNED(unsigned_cliques_input)
+    PREPARE_CLIQUE_DATA_UNSIGNED(unsigned_cliques_input)
+
+    // Stage 2: Process batches in parallel
+    // Create (tissue, batch_id, conserved_pairs, batch_assignments) tuples for each batch
+    batch_inputs_signed = PREPARE_CLIQUE_DATA.out.batch_ids
+        .flatMap { tissue, batch_ids_file ->
+            batch_ids_file.text.readLines().collect { batch_id ->
+                tuple(tissue, batch_id.toInteger())
+            }
+        }
+        .combine(
+            PREPARE_CLIQUE_DATA.out.conserved_pairs
+                .map { tissue, pairs_file -> tuple(tissue, pairs_file) },
+            by: 0
+        )
+        .combine(
+            PREPARE_CLIQUE_DATA.out.batch_assignments
+                .map { tissue, assigns_file -> tuple(tissue, assigns_file) },
+            by: 0
+        )
+        .map { tissue, batch_id, pairs_file, assigns_file ->
+            tuple(tissue, batch_id, pairs_file, assigns_file)
+        }
+
+    FIND_CLIQUES_BATCH(batch_inputs_signed)
+
+    batch_inputs_unsigned = PREPARE_CLIQUE_DATA_UNSIGNED.out.batch_ids
+        .flatMap { tissue, batch_ids_file ->
+            batch_ids_file.text.readLines().collect { batch_id ->
+                tuple(tissue, batch_id.toInteger())
+            }
+        }
+        .combine(
+            PREPARE_CLIQUE_DATA_UNSIGNED.out.conserved_pairs
+                .map { tissue, pairs_file -> tuple(tissue, pairs_file) },
+            by: 0
+        )
+        .combine(
+            PREPARE_CLIQUE_DATA_UNSIGNED.out.batch_assignments
+                .map { tissue, assigns_file -> tuple(tissue, assigns_file) },
+            by: 0
+        )
+        .map { tissue, batch_id, pairs_file, assigns_file ->
+            tuple(tissue, batch_id, pairs_file, assigns_file)
+        }
+
+    FIND_CLIQUES_BATCH_UNSIGNED(batch_inputs_unsigned)
+
+    // Stage 3: Merge and annotate cliques
+    merge_input_signed = FIND_CLIQUES_BATCH.out.batch_cliques
+        .groupTuple()
+
+    MERGE_ANNOTATE_CLIQUES(merge_input_signed)
+
+    merge_input_unsigned = FIND_CLIQUES_BATCH_UNSIGNED.out.batch_cliques
+        .groupTuple()
+
+    MERGE_ANNOTATE_CLIQUES_UNSIGNED(merge_input_unsigned)
 
     // Step 10: Polarity divergence (formerly Step 6)
     // Join signed and unsigned network files for polarity comparison
@@ -706,7 +973,7 @@ workflow {
     POLARITY_DIVERGENCE(divergence_input)
 
     // 5. Generate summary report
-    all_cliques = FIND_CLIQUES.out.cliques
+    all_cliques = MERGE_ANNOTATE_CLIQUES.out.cliques_csv
         .map { _tissue, files -> files }
         .flatten()
         .collect()

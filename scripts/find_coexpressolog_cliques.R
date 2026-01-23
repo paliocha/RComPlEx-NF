@@ -192,6 +192,7 @@ gc(verbose = FALSE)
 unique_hogs <- unique(conserved_pairs$HOG)
 n_hogs <- length(unique_hogs)
 cat("  Processing", n_hogs, "HOGs...\n")
+cat("  Progress will be reported every 5% (~", round(n_hogs / 20), " HOGs)\n\n", sep = "")
 
 # Pre-allocate results list (more memory efficient than growing a data frame)
 results_list <- vector("list", n_hogs)
@@ -248,8 +249,11 @@ for (i in seq_len(n_hogs)) {
   if (processed_count %% progress_interval == 0 || processed_count == n_hogs) {
     pct <- round(100 * processed_count / n_hogs)
     elapsed <- difftime(Sys.time(), start_time, units = "mins")
-    cat(sprintf("  [%3d%%] Processed %d/%d HOGs, found %d cliques (%.1f min elapsed)\n",
-                pct, processed_count, n_hogs, clique_count, as.numeric(elapsed)))
+    eta_mins <- if (pct > 0) as.numeric(elapsed) * (100 - pct) / pct else NA
+    mem_used <- sum(gc()[, 2])  # Memory used in MB
+    cat(sprintf("  [%3d%%] %d/%d HOGs | %d cliques | %.1f min elapsed | ETA: %.1f min | Mem: %.1f GB | Last: %s\n",
+                pct, processed_count, n_hogs, clique_count, as.numeric(elapsed), 
+                ifelse(is.na(eta_mins), 0, eta_mins), mem_used / 1024, hog_id))
     gc(verbose = FALSE)
   }
 }
