@@ -386,7 +386,7 @@ species2_name <- opt$species2
 save(species1_net_signed, species2_net_signed,
      species1_thr_signed, species2_thr_signed,
      species1_name, species2_name, ortho,
-     file = output_file_signed)
+     file = output_file_signed, compress = FALSE)
 
 # Save unsigned networks if available
 if (have_unsigned) {
@@ -395,7 +395,7 @@ if (have_unsigned) {
   save(species1_net_unsigned, species2_net_unsigned,
        species1_thr_unsigned, species2_thr_unsigned,
        species1_name, species2_name, ortho,
-       file = output_file_unsigned)
+       file = output_file_unsigned, compress = FALSE)
 }
 
 cat("\n")

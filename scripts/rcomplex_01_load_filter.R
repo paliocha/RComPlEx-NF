@@ -186,7 +186,7 @@ output_file <- file.path(opt$outdir, "01_filtered_data.RData")
 cat("Saving filtered data to:", output_file, "\n")
 save(ortho, species1_expr, species2_expr,
      species1_name, species2_name,
-     file = output_file)
+     file = output_file, compress = FALSE)
 
 cat("\n")
 cat(rep("=", 80), "\n", sep = "")

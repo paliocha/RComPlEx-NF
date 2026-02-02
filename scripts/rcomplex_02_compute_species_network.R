@@ -249,7 +249,7 @@ if (norm_method == "CLR") {
   cat("\nSaving signed MR network...\n")
   output_file_signed <- file.path(opt$outdir, "02_network_signed.RData")
   save(species_net, species_thr, species_genes,
-       file = output_file_signed)
+       file = output_file_signed, compress = FALSE)
 
   # Clean up signed network to free memory
   rm(species_net, species_thr)
@@ -284,7 +284,7 @@ if (norm_method == "CLR") {
   cat("\nSaving unsigned MR network...\n")
   output_file_unsigned <- file.path(opt$outdir, "02_network_unsigned.RData")
   save(species_net_unsigned, species_thr_unsigned, species_genes,
-       file = output_file_unsigned)
+       file = output_file_unsigned, compress = FALSE)
 
   # Clean up
   rm(species_cor_original, species_net_unsigned, species_thr_unsigned)
@@ -313,7 +313,7 @@ if (norm_method == "CLR") {
   cat("Saving CLR network to:", output_file, "\n")
   species_genes <- rownames(species_net)
   save(species_net, species_thr, species_genes,
-       file = output_file)
+       file = output_file, compress = FALSE)
 }
 
 elapsed <- as.numeric(difftime(Sys.time(), start_time, units = "mins"))

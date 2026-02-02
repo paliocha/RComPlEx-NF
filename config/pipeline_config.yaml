@@ -9,22 +9,18 @@ data:
 
 # Species classification
 # Note: life_cycle annotation is already in the data, this is for validation
+# Removed: Oloptum miliaceum, Melica nutans, Nassella pubiflora, Poa annua, Poa supina
 species:
   annual:
     - "Brachypodium distachyon"
     - "Hordeum vulgare"
     - "Vulpia bromoides"
     - "Briza maxima"
-    - "Poa annua"
   perennial:
     - "Brachypodium sylvaticum"
     - "Hordeum jubatum"
-    - "Poa supina"
     - "Briza media"
     - "Festuca pratensis"
-    - "Melica nutans"
-    - "Nassella pubiflora"
-    - "Oloptum miliaceum"
 
 # Tissue-specific analysis
 tissues:

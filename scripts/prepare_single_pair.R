@@ -164,7 +164,7 @@ cat("    - Total ortholog pairs:", nrow(ortho), "\n")
 
 # Save ortholog pairs
 ortho_file <- file.path(pair_dir, paste0("orthologs-", sp1, "-", sp2, ".RData"))
-save(ortho, file = ortho_file)
+save(ortho, file = ortho_file, compress = FALSE)
 cat("    - Saved orthologs to:", ortho_file, "\n")
 
 # 2. Convert species 1 expression to wide format

@@ -295,7 +295,7 @@ output_file <- file.path(opt$outdir, paste0("03_", opt$pair_id, output_suffix, "
 cat("Saving comparison results to:", output_file, "\n")
 save(comparison, species1_thr, species2_thr,
      species1_name, species2_name,
-     file = output_file)
+     file = output_file, compress = FALSE)
 
 cat("\n")
 cat(rep("=", 80), "\n", sep = "")
