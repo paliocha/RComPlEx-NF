@@ -10,7 +10,14 @@ suppressPackageStartupMessages({
   library(tidyverse)
   library(optparse)
   library(glue)
+  library(qs2)
 })
+
+# Configure qs2 to use available threads (SLURM or detected cores)
+qs2_threads <- as.integer(Sys.getenv("SLURM_CPUS_PER_TASK", parallel::detectCores(logical = FALSE)))
+if (is.na(qs2_threads) || qs2_threads < 1L) qs2_threads <- 1L
+qopt(nthreads = qs2_threads)
+message(sprintf("qs2 configured with %d threads", qs2_threads))
 
 # Source Orion HPC utilities for path resolution
 orion_utils_candidates <- c(
@@ -98,7 +105,7 @@ dir.create(opt$outdir, showWarnings = FALSE, recursive = TRUE)
 # FIND AND LOAD BATCH FILES ====================================================
 cat("Finding batch files...\n")
 
-pattern <- glue("cliques_{opt$tissue}_{mode_suffix}_batch.*\\.rds$")
+pattern <- glue("cliques_{opt$tissue}_{mode_suffix}_batch.*\\.qs2$")
 batch_files <- list.files(opt$input_dir, pattern = pattern, full.names = TRUE)
 
 if (length(batch_files) == 0) {
@@ -110,7 +117,7 @@ cat("  Found", length(batch_files), "batch files\n\n")
 cat("Loading and merging batch results...\n")
 all_cliques <- map_dfr(batch_files, function(file) {
   cat("  Loading:", basename(file), "\n")
-  readRDS(file)
+  qs_read(file)
 }, .progress = FALSE)
 
 cat("\n  ✓ Merged", nrow(all_cliques), "cliques from", length(batch_files), "batches\n")
@@ -120,7 +127,7 @@ if (nrow(all_cliques) == 0) {
   
   # Save empty results
   output_prefix <- ifelse(opt$signed, "cliques", "cliques_unsigned")
-  saveRDS(tibble(), file.path(opt$outdir, glue("{output_prefix}.rds")))
+  qs_save(tibble(), file.path(opt$outdir, glue("{output_prefix}.qs2")))
   write_csv(tibble(), file.path(opt$outdir, glue("{output_prefix}.csv")))
   
   cat("Created empty output files.\n")
@@ -224,11 +231,11 @@ cat("\nSaving results...\n")
 
 output_prefix <- ifelse(opt$signed, "cliques", "cliques_unsigned")
 
-# Save full RDS with all data
-full_rds <- file.path(opt$outdir, glue("{output_prefix}.rds"))
-saveRDS(all_cliques_annotated, full_rds)
-cat("  ✓ Full data (RDS):", full_rds, "\n")
-cat("    Size:", round(file.size(full_rds) / 1024^2, 1), "MB\n")
+# Save full data with qs2 for fast I/O
+full_qs2 <- file.path(opt$outdir, glue("{output_prefix}.qs2"))
+qs_save(all_cliques_annotated, full_qs2)
+cat("  ✓ Full data (qs2):", full_qs2, "\n")
+cat("    Size:", round(file.size(full_qs2) / 1024^2, 1), "MB\n")
 
 # Create flat CSV for easier viewing
 all_cliques_flat <- all_cliques_annotated %>%

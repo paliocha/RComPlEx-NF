@@ -9,7 +9,14 @@
 suppressPackageStartupMessages({
   library(tidyverse)
   library(optparse)
+  library(qs2)
 })
+
+# Configure qs2 to use available threads (SLURM or detected cores)
+qs2_threads <- as.integer(Sys.getenv("SLURM_CPUS_PER_TASK", parallel::detectCores(logical = FALSE)))
+if (is.na(qs2_threads) || qs2_threads < 1L) qs2_threads <- 1L
+qopt(nthreads = qs2_threads)
+message(sprintf("qs2 configured with %d threads", qs2_threads))
 
 # Source Orion HPC utilities for path resolution
 orion_utils_candidates <- c(
@@ -117,13 +124,13 @@ cat("Loading", opt$species1, "signed network from:", opt$net1_signed, "\n")
 if (!file.exists(opt$net1_signed)) {
   stop("Species 1 signed network not found: ", opt$net1_signed)
 }
-load(opt$net1_signed)  # loads: species_net, species_thr, species_genes
-species1_net_signed <- species_net
-species1_thr_signed <- species_thr
-species1_genes_full <- species_genes
+net1_data <- qs_read(opt$net1_signed)  # loads: species_net, species_thr, species_genes
+species1_net_signed <- net1_data$species_net
+species1_thr_signed <- net1_data$species_thr
+species1_genes_full <- net1_data$species_genes
 cat("  Loaded:", nrow(species1_net_signed), "×", ncol(species1_net_signed), "matrix\n")
 cat("  Threshold:", format(species1_thr_signed, digits = 3), "\n\n")
-rm(species_net, species_thr, species_genes)
+rm(net1_data)
 gc(verbose = FALSE)
 
 # Load species 2 signed network
@@ -131,13 +138,13 @@ cat("Loading", opt$species2, "signed network from:", opt$net2_signed, "\n")
 if (!file.exists(opt$net2_signed)) {
   stop("Species 2 signed network not found: ", opt$net2_signed)
 }
-load(opt$net2_signed)  # loads: species_net, species_thr, species_genes
-species2_net_signed <- species_net
-species2_thr_signed <- species_thr
-species2_genes_full <- species_genes
+net2_data <- qs_read(opt$net2_signed)  # loads: species_net, species_thr, species_genes
+species2_net_signed <- net2_data$species_net
+species2_thr_signed <- net2_data$species_thr
+species2_genes_full <- net2_data$species_genes
 cat("  Loaded:", nrow(species2_net_signed), "×", ncol(species2_net_signed), "matrix\n")
 cat("  Threshold:", format(species2_thr_signed, digits = 3), "\n\n")
-rm(species_net, species_thr, species_genes)
+rm(net2_data)
 gc(verbose = FALSE)
 
 # ==============================================================================
@@ -273,24 +280,24 @@ if (have_unsigned) {
 
   # Load species 1 unsigned network
   cat("Loading", opt$species1, "unsigned network from:", opt$net1_unsigned, "\n")
-  load(opt$net1_unsigned)  # loads: species_net_unsigned, species_thr_unsigned, species_genes
-  species1_net_unsigned <- species_net_unsigned
-  species1_thr_unsigned <- species_thr_unsigned
-  species1_genes_full_u <- species_genes
+  net1u_data <- qs_read(opt$net1_unsigned)  # loads: species_net_unsigned, species_thr_unsigned, species_genes
+  species1_net_unsigned <- net1u_data$species_net_unsigned
+  species1_thr_unsigned <- net1u_data$species_thr_unsigned
+  species1_genes_full_u <- net1u_data$species_genes
   cat("  Loaded:", nrow(species1_net_unsigned), "×", ncol(species1_net_unsigned), "matrix\n")
   cat("  Threshold:", format(species1_thr_unsigned, digits = 3), "\n\n")
-  rm(species_net_unsigned, species_thr_unsigned, species_genes)
+  rm(net1u_data)
   gc(verbose = FALSE)
 
   # Load species 2 unsigned network
   cat("Loading", opt$species2, "unsigned network from:", opt$net2_unsigned, "\n")
-  load(opt$net2_unsigned)  # loads: species_net_unsigned, species_thr_unsigned, species_genes
-  species2_net_unsigned <- species_net_unsigned
-  species2_thr_unsigned <- species_thr_unsigned
-  species2_genes_full_u <- species_genes
+  net2u_data <- qs_read(opt$net2_unsigned)  # loads: species_net_unsigned, species_thr_unsigned, species_genes
+  species2_net_unsigned <- net2u_data$species_net_unsigned
+  species2_thr_unsigned <- net2u_data$species_thr_unsigned
+  species2_genes_full_u <- net2u_data$species_genes
   cat("  Loaded:", nrow(species2_net_unsigned), "×", ncol(species2_net_unsigned), "matrix\n")
   cat("  Threshold:", format(species2_thr_unsigned, digits = 3), "\n\n")
-  rm(species_net_unsigned, species_thr_unsigned, species_genes)
+  rm(net2u_data)
   gc(verbose = FALSE)
 
   # Filter unsigned networks to pair orthologs
@@ -378,24 +385,24 @@ cat(rep("=", 60), "\n\n", sep = "")
 
 dir.create(opt$outdir, showWarnings = FALSE, recursive = TRUE)
 
-# Save signed networks
-output_file_signed <- file.path(opt$outdir, "02_networks_signed.RData")
+# Save signed networks using qs2 for fast I/O
+output_file_signed <- file.path(opt$outdir, "02_networks_signed.qs2")
 cat("Saving signed networks to:", output_file_signed, "\n")
 species1_name <- opt$species1
 species2_name <- opt$species2
-save(species1_net_signed, species2_net_signed,
-     species1_thr_signed, species2_thr_signed,
-     species1_name, species2_name, ortho,
-     file = output_file_signed, compress = FALSE)
+qs_save(list(species1_net_signed = species1_net_signed, species2_net_signed = species2_net_signed,
+             species1_thr_signed = species1_thr_signed, species2_thr_signed = species2_thr_signed,
+             species1_name = species1_name, species2_name = species2_name, ortho = ortho),
+        output_file_signed)
 
 # Save unsigned networks if available
 if (have_unsigned) {
-  output_file_unsigned <- file.path(opt$outdir, "02_networks_unsigned.RData")
+  output_file_unsigned <- file.path(opt$outdir, "02_networks_unsigned.qs2")
   cat("Saving unsigned networks to:", output_file_unsigned, "\n")
-  save(species1_net_unsigned, species2_net_unsigned,
-       species1_thr_unsigned, species2_thr_unsigned,
-       species1_name, species2_name, ortho,
-       file = output_file_unsigned, compress = FALSE)
+  qs_save(list(species1_net_unsigned = species1_net_unsigned, species2_net_unsigned = species2_net_unsigned,
+               species1_thr_unsigned = species1_thr_unsigned, species2_thr_unsigned = species2_thr_unsigned,
+               species1_name = species1_name, species2_name = species2_name, ortho = ortho),
+          output_file_unsigned)
 }
 
 cat("\n")

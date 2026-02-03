@@ -2,7 +2,14 @@
 suppressPackageStartupMessages({
   library(optparse)
   library(tidyverse)
+  library(qs2)
 })
+
+# Configure qs2 to use available threads (SLURM or detected cores)
+qs2_threads <- as.integer(Sys.getenv("SLURM_CPUS_PER_TASK", parallel::detectCores(logical = FALSE)))
+if (is.na(qs2_threads) || qs2_threads < 1L) qs2_threads <- 1L
+qopt(nthreads = qs2_threads)
+message(sprintf("qs2 configured with %d threads", qs2_threads))
 
 option_list <- list(
   make_option(c("-t","--tissue"), type="character"),
@@ -17,9 +24,18 @@ if (is.null(opt$tissue) || is.null(opt$pair_id) || is.null(opt$signed) || is.nul
   stop("Missing required arguments: --tissue --pair_id --signed --unsigned")
 }
 
-# Load network objects from RData files
-load(opt$signed)
-load(opt$unsigned)
+# Load network objects from qs2 files
+signed_data <- qs_read(opt$signed)
+unsigned_data <- qs_read(opt$unsigned)
+
+# Extract variables from lists
+species1_net_signed <- signed_data$species1_net_signed
+species2_net_signed <- signed_data$species2_net_signed
+species1_name <- signed_data$species1_name
+species2_name <- signed_data$species2_name
+
+species1_net_unsigned <- unsigned_data$species1_net_unsigned
+species2_net_unsigned <- unsigned_data$species2_net_unsigned
 
 # Helper function to extract edges from a network matrix
 extract_edges <- function(obj, mode, species_name) {

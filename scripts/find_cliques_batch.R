@@ -11,7 +11,14 @@ suppressPackageStartupMessages({
   library(igraph)
   library(optparse)
   library(glue)
+  library(qs2)
 })
+
+# Configure qs2 to use available threads (SLURM or detected cores)
+qs2_threads <- as.integer(Sys.getenv("SLURM_CPUS_PER_TASK", parallel::detectCores(logical = FALSE)))
+if (is.na(qs2_threads) || qs2_threads < 1L) qs2_threads <- 1L
+qopt(nthreads = qs2_threads)
+message(sprintf("qs2 configured with %d threads", qs2_threads))
 
 # Parse command-line arguments
 option_list <- list(
@@ -65,12 +72,12 @@ cat("Loading batch data...\n")
 
 # Load conserved pairs
 cat("  Loading conserved pairs from:", opt$pairs_file, "\n")
-all_pairs <- readRDS(opt$pairs_file)
+all_pairs <- qs_read(opt$pairs_file)
 print_memory("  After loading pairs ")
 
 # Load batch assignments
 cat("  Loading batch assignments from:", opt$batch_assignments, "\n")
-batch_assignments <- readRDS(opt$batch_assignments)
+batch_assignments <- qs_read(opt$batch_assignments)
 
 # Get HOGs for this batch
 batch_hogs <- batch_assignments %>%
@@ -210,9 +217,9 @@ cat("\nSaving results...\n")
 # Create output filename
 mode_suffix <- ifelse(opt$signed, "signed", "unsigned")
 output_file <- file.path(opt$outdir, 
-                         glue("cliques_{opt$tissue}_{mode_suffix}_batch{sprintf('%03d', opt$batch_id)}.rds"))
+                         glue("cliques_{opt$tissue}_{mode_suffix}_batch{sprintf('%03d', opt$batch_id)}.qs2"))
 
-saveRDS(all_cliques, output_file)
+qs_save(all_cliques, output_file)
 cat("  ✓ Saved:", output_file, "\n")
 cat("    Size:", round(file.size(output_file) / 1024^2, 1), "MB\n")
 

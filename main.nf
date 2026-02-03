@@ -144,8 +144,8 @@ process RCOMPLEX_02_COMPUTE_SPECIES_NETWORKS {
     tuple val(tissue), val(species)
 
     output:
-    tuple val(tissue), val(species), path("02_network_signed.RData"), emit: network_signed
-    tuple val(tissue), val(species), path("02_network_unsigned.RData"), emit: network_unsigned, optional: true
+    tuple val(tissue), val(species), path("02_network_signed.qs2"), emit: network_signed
+    tuple val(tissue), val(species), path("02_network_unsigned.qs2"), emit: network_unsigned, optional: true
 
     script:
     """
@@ -172,14 +172,14 @@ process RCOMPLEX_03_LOAD_AND_FILTER_NETWORKS {
 
     input:
     tuple val(tissue), val(pair_id), val(species1), val(species2), path(step1_dir),
-          path(net1_signed, stageAs: 'sp1_net_signed.RData'), 
-          path(net2_signed, stageAs: 'sp2_net_signed.RData'), 
-          path(net1_unsigned, stageAs: 'sp1_net_unsigned.RData'), 
-          path(net2_unsigned, stageAs: 'sp2_net_unsigned.RData')
+          path(net1_signed, stageAs: 'sp1_net_signed.qs2'), 
+          path(net2_signed, stageAs: 'sp2_net_signed.qs2'), 
+          path(net1_unsigned, stageAs: 'sp1_net_unsigned.qs2'), 
+          path(net2_unsigned, stageAs: 'sp2_net_unsigned.qs2')
 
     output:
-    tuple val(tissue), val(pair_id), path("02_networks_signed.RData"), emit: networks_signed
-    tuple val(tissue), val(pair_id), path("02_networks_unsigned.RData"), emit: networks_unsigned
+    tuple val(tissue), val(pair_id), path("02_networks_signed.qs2"), emit: networks_signed
+    tuple val(tissue), val(pair_id), path("02_networks_unsigned.qs2"), emit: networks_unsigned
 
     script:
     """
@@ -359,8 +359,8 @@ process PREPARE_CLIQUE_DATA {
     tuple val(tissue), path(comparison_files)
 
     output:
-    tuple val(tissue), path("conserved_pairs_${tissue}.rds"), emit: conserved_pairs
-    tuple val(tissue), path("batch_assignments_${tissue}.rds"), emit: batch_assignments
+    tuple val(tissue), path("conserved_pairs_${tissue}.qs2"), emit: conserved_pairs
+    tuple val(tissue), path("batch_assignments_${tissue}.qs2"), emit: batch_assignments
     tuple val(tissue), path("batch_ids_${tissue}.txt"), emit: batch_ids
     tuple val(tissue), path("batch_info_${tissue}.tsv"), emit: batch_info
 
@@ -403,8 +403,8 @@ process PREPARE_CLIQUE_DATA_UNSIGNED {
     tuple val(tissue), path(comparison_files_unsigned)
 
     output:
-    tuple val(tissue), path("conserved_pairs_${tissue}.rds"), emit: conserved_pairs
-    tuple val(tissue), path("batch_assignments_${tissue}.rds"), emit: batch_assignments
+    tuple val(tissue), path("conserved_pairs_${tissue}.qs2"), emit: conserved_pairs
+    tuple val(tissue), path("batch_assignments_${tissue}.qs2"), emit: batch_assignments
     tuple val(tissue), path("batch_ids_${tissue}.txt"), emit: batch_ids
     tuple val(tissue), path("batch_info_${tissue}.tsv"), emit: batch_info
 
@@ -441,7 +441,7 @@ process FIND_CLIQUES_BATCH {
     tuple val(tissue), val(batch_id), path(conserved_pairs), path(batch_assignments)
 
     output:
-    tuple val(tissue), path("cliques_${tissue}_signed_batch*.rds"), emit: batch_cliques
+    tuple val(tissue), path("cliques_${tissue}_signed_batch*.qs2"), emit: batch_cliques
 
     script:
     """
@@ -467,7 +467,7 @@ process FIND_CLIQUES_BATCH_UNSIGNED {
     tuple val(tissue), val(batch_id), path(conserved_pairs), path(batch_assignments)
 
     output:
-    tuple val(tissue), path("cliques_${tissue}_unsigned_batch*.rds"), emit: batch_cliques
+    tuple val(tissue), path("cliques_${tissue}_unsigned_batch*.qs2"), emit: batch_cliques
 
     script:
     """
@@ -494,7 +494,7 @@ process MERGE_ANNOTATE_CLIQUES {
     tuple val(tissue), path(batch_files)
 
     output:
-    tuple val(tissue), path('cliques.rds'), emit: cliques_rds
+    tuple val(tissue), path('cliques.qs2'), emit: cliques_qs2
     tuple val(tissue), path('cliques.csv'), emit: cliques_csv
     tuple val(tissue), path('cliques_*.csv'), emit: cliques_by_lifehabit, optional: true
 
@@ -523,7 +523,7 @@ process MERGE_ANNOTATE_CLIQUES_UNSIGNED {
     tuple val(tissue), path(batch_files)
 
     output:
-    tuple val(tissue), path('cliques_unsigned.rds'), emit: cliques_unsigned_rds
+    tuple val(tissue), path('cliques_unsigned.qs2'), emit: cliques_unsigned_qs2
     tuple val(tissue), path('cliques_unsigned.csv'), emit: cliques_unsigned_csv
     tuple val(tissue), path('cliques_unsigned_*.csv'), emit: cliques_unsigned_by_lifehabit, optional: true
 

@@ -10,7 +10,14 @@ suppressPackageStartupMessages({
   library(tidyverse)
   library(optparse)
   library(parallel)
+  library(qs2)
 })
+
+# Configure qs2 to use available threads (SLURM or detected cores)
+qs2_threads <- as.integer(Sys.getenv("SLURM_CPUS_PER_TASK", parallel::detectCores(logical = FALSE)))
+if (is.na(qs2_threads) || qs2_threads < 1L) qs2_threads <- 1L
+qopt(nthreads = qs2_threads)
+message(sprintf("qs2 configured with %d threads", qs2_threads))
 
 # Source Orion HPC utilities for path resolution
 orion_utils_candidates <- c(
@@ -245,11 +252,11 @@ if (norm_method == "CLR") {
   rm(R)
   gc(verbose = FALSE)
 
-  # Save signed network
+  # Save signed network using qs2 for fast I/O
   cat("\nSaving signed MR network...\n")
-  output_file_signed <- file.path(opt$outdir, "02_network_signed.RData")
-  save(species_net, species_thr, species_genes,
-       file = output_file_signed, compress = FALSE)
+  output_file_signed <- file.path(opt$outdir, "02_network_signed.qs2")
+  qs_save(list(species_net = species_net, species_thr = species_thr, species_genes = species_genes),
+          output_file_signed)
 
   # Clean up signed network to free memory
   rm(species_net, species_thr)
@@ -280,11 +287,11 @@ if (norm_method == "CLR") {
   rm(R)
   gc(verbose = FALSE)
 
-  # Save unsigned MR network
+  # Save unsigned MR network using qs2 for fast I/O
   cat("\nSaving unsigned MR network...\n")
-  output_file_unsigned <- file.path(opt$outdir, "02_network_unsigned.RData")
-  save(species_net_unsigned, species_thr_unsigned, species_genes,
-       file = output_file_unsigned, compress = FALSE)
+  output_file_unsigned <- file.path(opt$outdir, "02_network_unsigned.qs2")
+  qs_save(list(species_net_unsigned = species_net_unsigned, species_thr_unsigned = species_thr_unsigned, species_genes = species_genes),
+          output_file_unsigned)
 
   # Clean up
   rm(species_cor_original, species_net_unsigned, species_thr_unsigned)
@@ -308,12 +315,12 @@ if (norm_method == "CLR") {
   rm(R)
   gc(verbose = FALSE)
 
-  # Save CLR network
-  output_file <- file.path(opt$outdir, "02_network_signed.RData")
+  # Save CLR network using qs2 for fast I/O
+  output_file <- file.path(opt$outdir, "02_network_signed.qs2")
   cat("Saving CLR network to:", output_file, "\n")
   species_genes <- rownames(species_net)
-  save(species_net, species_thr, species_genes,
-       file = output_file, compress = FALSE)
+  qs_save(list(species_net = species_net, species_thr = species_thr, species_genes = species_genes),
+          output_file)
 }
 
 elapsed <- as.numeric(difftime(Sys.time(), start_time, units = "mins"))

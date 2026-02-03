@@ -10,7 +10,14 @@ suppressPackageStartupMessages({
   library(tidyverse)
   library(optparse)
   library(glue)
+  library(qs2)
 })
+
+# Configure qs2 to use available threads (SLURM or detected cores)
+qs2_threads <- as.integer(Sys.getenv("SLURM_CPUS_PER_TASK", parallel::detectCores(logical = FALSE)))
+if (is.na(qs2_threads) || qs2_threads < 1L) qs2_threads <- 1L
+qopt(nthreads = qs2_threads)
+message(sprintf("qs2 configured with %d threads", qs2_threads))
 
 # Source Orion HPC utilities for path resolution
 orion_utils_candidates <- c(
@@ -184,15 +191,15 @@ cat("\n")
 # SAVE INTERMEDIATE DATA =======================================================
 cat("Saving intermediate data...\n")
 
-# Save conserved pairs (main data)
-pairs_file <- file.path(opt$outdir, glue("conserved_pairs_{opt$tissue}.rds"))
-saveRDS(conserved_pairs, pairs_file)
+# Save conserved pairs (main data) using qs2 for fast I/O
+pairs_file <- file.path(opt$outdir, glue("conserved_pairs_{opt$tissue}.qs2"))
+qs_save(conserved_pairs, pairs_file)
 cat("  ✓ Conserved pairs:", pairs_file, "\n")
 cat("    Size:", round(file.size(pairs_file) / 1024^2, 1), "MB\n")
 
-# Save batch assignments
-batch_file <- file.path(opt$outdir, glue("batch_assignments_{opt$tissue}.rds"))
-saveRDS(batch_assignments, batch_file)
+# Save batch assignments using qs2
+batch_file <- file.path(opt$outdir, glue("batch_assignments_{opt$tissue}.qs2"))
+qs_save(batch_assignments, batch_file)
 cat("  ✓ Batch assignments:", batch_file, "\n")
 
 # Save batch info for Nextflow to read
