@@ -12,7 +12,13 @@ suppressPackageStartupMessages({
   library(furrr)
   library(future)
   library(parallel)
+  library(qs2)
 })
+
+# Configure qs2 to use available threads
+qs2_threads <- as.integer(Sys.getenv("SLURM_CPUS_PER_TASK", parallel::detectCores(logical = FALSE)))
+if (is.na(qs2_threads) || qs2_threads < 1L) qs2_threads <- 1L
+qopt("nthreads", qs2_threads)
 
 # Source Orion HPC utilities for path resolution (resolve across work and home mounts)
 orion_utils_candidates <- c(
@@ -119,31 +125,54 @@ dir.create(opt$outdir, showWarnings = FALSE, recursive = TRUE)
 cat("Loading data from previous steps...\n")
 
 # Load networks from step 3 (includes ortho table, species names, networks, and thresholds)
-# Check for both signed and unsigned versions
-input_file_signed <- file.path(opt$indir, "02_networks_signed.RData")
-input_file_unsigned <- file.path(opt$indir, "02_networks_unsigned.RData")
+# Check for qs2 format first (preferred), then fall back to RData for legacy compatibility
+input_file_signed_qs2 <- file.path(opt$indir, "02_networks_signed.qs2")
+input_file_unsigned_qs2 <- file.path(opt$indir, "02_networks_unsigned.qs2")
+input_file_signed_rdata <- file.path(opt$indir, "02_networks_signed.RData")
+input_file_unsigned_rdata <- file.path(opt$indir, "02_networks_unsigned.RData")
 
-if (file.exists(input_file_signed)) {
-  cat("  Loading signed networks from:", input_file_signed, "\n")
-  load(input_file_signed)
-  # Rename for consistency with downstream code
+if (file.exists(input_file_signed_qs2)) {
+  cat("  Loading signed networks from (qs2):", input_file_signed_qs2, "\n")
+  data <- qs_read(input_file_signed_qs2)
+  species1_net <- data$species1_net_signed
+  species2_net <- data$species2_net_signed
+  species1_thr <- data$species1_thr_signed
+  species2_thr <- data$species2_thr_signed
+  ortho <- data$ortho
+  species1_name <- data$species1_name
+  species2_name <- data$species2_name
+  network_type <- "signed"
+} else if (file.exists(input_file_unsigned_qs2)) {
+  cat("  Loading unsigned networks from (qs2):", input_file_unsigned_qs2, "\n")
+  data <- qs_read(input_file_unsigned_qs2)
+  species1_net <- data$species1_net_unsigned
+  species2_net <- data$species2_net_unsigned
+  species1_thr <- data$species1_thr_unsigned
+  species2_thr <- data$species2_thr_unsigned
+  ortho <- data$ortho
+  species1_name <- data$species1_name
+  species2_name <- data$species2_name
+  network_type <- "unsigned"
+} else if (file.exists(input_file_signed_rdata)) {
+  cat("  Loading signed networks from (RData):", input_file_signed_rdata, "\n")
+  load(input_file_signed_rdata)
   species1_net <- species1_net_signed
   species2_net <- species2_net_signed
   species1_thr <- species1_thr_signed
   species2_thr <- species2_thr_signed
   network_type <- "signed"
-} else if (file.exists(input_file_unsigned)) {
-  cat("  Loading unsigned networks from:", input_file_unsigned, "\n")
-  load(input_file_unsigned)
-  # Rename for consistency with downstream code
+} else if (file.exists(input_file_unsigned_rdata)) {
+  cat("  Loading unsigned networks from (RData):", input_file_unsigned_rdata, "\n")
+  load(input_file_unsigned_rdata)
   species1_net <- species1_net_unsigned
   species2_net <- species2_net_unsigned
   species1_thr <- species1_thr_unsigned
   species2_thr <- species2_thr_unsigned
   network_type <- "unsigned"
 } else {
-  stop("Networks file not found. Expected either:\n  ", 
-       input_file_signed, "\n  or\n  ", input_file_unsigned)
+  stop("Networks file not found. Expected one of:\n  ", 
+       input_file_signed_qs2, "\n  ", input_file_unsigned_qs2,
+       "\n  ", input_file_signed_rdata, "\n  or\n  ", input_file_unsigned_rdata)
 }
 
 cat("✓ Data loaded successfully\n\n")
