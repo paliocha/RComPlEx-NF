@@ -28,7 +28,7 @@ From: rocker/tidyverse:4.5.2
 
     Installed Packages:
       - tidyverse, igraph, WGCNA, furrr, future, gplots, RColorBrewer
-      - cowplot, DT, matrixStats, Rfast, influential, optparse, yaml, glue, qs
+      - cowplot, DT, matrixStats, Rfast, influential, optparse, yaml, glue, qs2
 
     Contact: martin.paliocha@nmbu.no
 
@@ -102,7 +102,7 @@ From: rocker/tidyverse:4.5.2
             'matrixStats',     # Fast matrix functions
             'Rfast',           # High-performance computations (Tcrossprod)
             'influential',     # Fast correlation and mutual rank analysis
-            'qs'               # Fast serialization (10x faster than RDS)
+            'qs2'              # Fast serialization (successor to qs)
         )
 
         # Optional/large packages that may require additional dependencies
