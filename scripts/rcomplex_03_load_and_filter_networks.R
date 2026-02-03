@@ -43,17 +43,21 @@ option_list <- list(
   make_option(c("--species2"), type = "character", default = NULL,
               help = "Second species name", metavar = "character"),
   make_option(c("--net1_signed"), type = "character", default = NULL,
-              help = "Path to species1 signed network RData file", metavar = "character"),
+              help = "Path to species1 signed network file", metavar = "character"),
   make_option(c("--net2_signed"), type = "character", default = NULL,
-              help = "Path to species2 signed network RData file", metavar = "character"),
+              help = "Path to species2 signed network file", metavar = "character"),
   make_option(c("--net1_unsigned"), type = "character", default = NULL,
-              help = "Path to species1 unsigned network RData file", metavar = "character"),
+              help = "Path to species1 unsigned network file", metavar = "character"),
   make_option(c("--net2_unsigned"), type = "character", default = NULL,
-              help = "Path to species2 unsigned network RData file", metavar = "character"),
+              help = "Path to species2 unsigned network file", metavar = "character"),
   make_option(c("-i", "--indir"), type = "character", default = NULL,
               help = "Input directory with step 1 pair data (for orthologs)", metavar = "character"),
   make_option(c("-o", "--outdir"), type = "character", default = NULL,
-              help = "Output directory for results", metavar = "character")
+              help = "Output directory for results", metavar = "character"),
+  make_option(c("--signed_only"), action = "store_true", default = FALSE,
+              help = "Process only signed networks"),
+  make_option(c("--unsigned_only"), action = "store_true", default = FALSE,
+              help = "Process only unsigned networks")
 )
 
 opt_parser <- OptionParser(option_list = option_list)
@@ -62,14 +66,23 @@ opt <- parse_args(opt_parser)
 # Resolve Orion HPC paths
 opt$indir <- resolve_orion_path(opt$indir)
 opt$outdir <- resolve_orion_path(opt$outdir)
-opt$net1_signed <- resolve_orion_path(opt$net1_signed)
-opt$net2_signed <- resolve_orion_path(opt$net2_signed)
-opt$net1_unsigned <- resolve_orion_path(opt$net1_unsigned)
-opt$net2_unsigned <- resolve_orion_path(opt$net2_unsigned)
+if (!is.null(opt$net1_signed)) opt$net1_signed <- resolve_orion_path(opt$net1_signed)
+if (!is.null(opt$net2_signed)) opt$net2_signed <- resolve_orion_path(opt$net2_signed)
+if (!is.null(opt$net1_unsigned)) opt$net1_unsigned <- resolve_orion_path(opt$net1_unsigned)
+if (!is.null(opt$net2_unsigned)) opt$net2_unsigned <- resolve_orion_path(opt$net2_unsigned)
 
-# Validate required arguments
-required_args <- c("tissue", "pair_id", "species1", "species2",
-                   "net1_signed", "net2_signed", "indir", "outdir")
+# Determine processing mode
+process_signed <- !opt$unsigned_only
+process_unsigned <- !opt$signed_only
+
+# Validate required arguments based on mode
+required_args <- c("tissue", "pair_id", "species1", "species2", "indir", "outdir")
+if (process_signed) {
+  required_args <- c(required_args, "net1_signed", "net2_signed")
+}
+if (process_unsigned) {
+  required_args <- c(required_args, "net1_unsigned", "net2_unsigned")
+}
 for (arg in required_args) {
   if (is.null(opt[[arg]])) {
     print_help(opt_parser)
@@ -77,9 +90,12 @@ for (arg in required_args) {
   }
 }
 
+# Determine mode string for logging
+mode_str <- if (opt$signed_only) "SIGNED ONLY" else if (opt$unsigned_only) "UNSIGNED ONLY" else "SIGNED + UNSIGNED"
+
 cat("\n")
 cat(rep("=", 80), "\n", sep = "")
-cat("RComPlEx Step 3: Load and Filter Pre-Computed Networks\n")
+cat("RComPlEx Step 3: Load and Filter Pre-Computed Networks (", mode_str, ")\n", sep = "")
 cat(rep("=", 80), "\n", sep = "")
 cat("Tissue:", opt$tissue, "\n")
 cat("Pair ID:", opt$pair_id, "\n")
@@ -112,8 +128,10 @@ rm(species1_expr, species2_expr)
 gc(verbose = FALSE)
 
 # ==============================================================================
-# LOAD SIGNED NETWORKS
+# LOAD SIGNED NETWORKS (if processing signed)
 # ==============================================================================
+
+if (process_signed) {
 
 cat(rep("=", 60), "\n", sep = "")
 cat("LOADING SIGNED NETWORKS\n")
@@ -266,11 +284,14 @@ rm(sp1_edges_signed, sp2_edges_signed, sp1_edges_sorted, sp2_edges_sorted,
 if (exists("target_density")) rm(target_density)
 gc(verbose = FALSE)
 
+}  # end if (process_signed)
+
 # ==============================================================================
-# LOAD UNSIGNED NETWORKS (if provided)
+# LOAD UNSIGNED NETWORKS (if processing unsigned)
 # ==============================================================================
 
-have_unsigned <- !is.null(opt$net1_unsigned) && !is.null(opt$net2_unsigned) &&
+have_unsigned <- process_unsigned && 
+                 !is.null(opt$net1_unsigned) && !is.null(opt$net2_unsigned) &&
                  file.exists(opt$net1_unsigned) && file.exists(opt$net2_unsigned)
 
 if (have_unsigned) {
@@ -385,15 +406,18 @@ cat(rep("=", 60), "\n\n", sep = "")
 
 dir.create(opt$outdir, showWarnings = FALSE, recursive = TRUE)
 
-# Save signed networks using qs2 for fast I/O
-output_file_signed <- file.path(opt$outdir, "02_networks_signed.qs2")
-cat("Saving signed networks to:", output_file_signed, "\n")
 species1_name <- opt$species1
 species2_name <- opt$species2
-qs_save(list(species1_net_signed = species1_net_signed, species2_net_signed = species2_net_signed,
-             species1_thr_signed = species1_thr_signed, species2_thr_signed = species2_thr_signed,
-             species1_name = species1_name, species2_name = species2_name, ortho = ortho),
-        output_file_signed)
+
+# Save signed networks using qs2 for fast I/O
+if (process_signed) {
+  output_file_signed <- file.path(opt$outdir, "02_networks_signed.qs2")
+  cat("Saving signed networks to:", output_file_signed, "\n")
+  qs_save(list(species1_net_signed = species1_net_signed, species2_net_signed = species2_net_signed,
+               species1_thr_signed = species1_thr_signed, species2_thr_signed = species2_thr_signed,
+               species1_name = species1_name, species2_name = species2_name, ortho = ortho),
+          output_file_signed)
+}
 
 # Save unsigned networks if available
 if (have_unsigned) {

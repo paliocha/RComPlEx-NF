@@ -19,5 +19,5 @@ micromamba activate $HOME/micromamba/envs/Nextflow
 # This ensures all new files count against the project quota, not personal quota
 newgrp fjellheimlab << 'ENDGROUP'
 umask 002
-nextflow run main.nf -profile slurm -resume
+nextflow run main.nf -profile slurm --run_unsigned -resume
 ENDGROUP

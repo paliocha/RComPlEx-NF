@@ -33,6 +33,7 @@ def helpMessage() {
         --tissues <tissue>     Tissues to analyze [default: root,leaf]
                                Use --tissues root or --tissues leaf for single tissue
         --test_mode            Run with first 3 pairs only [default: false]
+        --run_unsigned         Run unsigned network analysis + polarity divergence [default: false]
         --workdir <path>       Working directory for intermediate files [default: ${projectDir}]
         --outdir <path>        Output directory for final results [default: ${projectDir}/results]
         -w <path>              Nextflow work directory for temp files [default: ./work]
@@ -173,13 +174,10 @@ process RCOMPLEX_03_LOAD_AND_FILTER_NETWORKS {
     input:
     tuple val(tissue), val(pair_id), val(species1), val(species2), path(step1_dir),
           path(net1_signed, stageAs: 'sp1_net_signed.qs2'), 
-          path(net2_signed, stageAs: 'sp2_net_signed.qs2'), 
-          path(net1_unsigned, stageAs: 'sp1_net_unsigned.qs2'), 
-          path(net2_unsigned, stageAs: 'sp2_net_unsigned.qs2')
+          path(net2_signed, stageAs: 'sp2_net_signed.qs2')
 
     output:
     tuple val(tissue), val(pair_id), path("02_networks_signed.qs2"), emit: networks_signed
-    tuple val(tissue), val(pair_id), path("02_networks_unsigned.qs2"), emit: networks_unsigned
 
     script:
     """
@@ -189,7 +187,7 @@ process RCOMPLEX_03_LOAD_AND_FILTER_NETWORKS {
     # Extract directory path (step1_dir is the RData file, but script needs the directory)
     indir_path=\$(dirname "${step1_dir}")
 
-    # Step 3: Load pre-computed networks and filter to pair orthologs
+    # Step 3: Load pre-computed networks and filter to pair orthologs (signed only)
     Rscript "${projectDir}/scripts/rcomplex_03_load_and_filter_networks.R" \\
         --tissue ${tissue} \\
         --pair_id ${pair_id} \\
@@ -197,10 +195,43 @@ process RCOMPLEX_03_LOAD_AND_FILTER_NETWORKS {
         --species2 ${species2} \\
         --net1_signed ${net1_signed} \\
         --net2_signed ${net2_signed} \\
+        --indir "\${indir_path}" \\
+        --outdir . \\
+        --signed_only
+    """
+}
+
+// Unsigned version of the filter process (only runs when --run_unsigned is set)
+process RCOMPLEX_03_LOAD_AND_FILTER_NETWORKS_UNSIGNED {
+    label 'low_mem'
+    tag "${tissue}:${pair_id}"
+    cache 'lenient'
+
+    input:
+    tuple val(tissue), val(pair_id), val(species1), val(species2), path(step1_dir),
+          path(net1_unsigned, stageAs: 'sp1_net_unsigned.qs2'), 
+          path(net2_unsigned, stageAs: 'sp2_net_unsigned.qs2')
+
+    output:
+    tuple val(tissue), val(pair_id), path("02_networks_unsigned.qs2"), emit: networks_unsigned
+
+    script:
+    """
+    #!/bin/bash
+    set -e
+
+    indir_path=\$(dirname "${step1_dir}")
+
+    Rscript "${projectDir}/scripts/rcomplex_03_load_and_filter_networks.R" \\
+        --tissue ${tissue} \\
+        --pair_id ${pair_id} \\
+        --species1 ${species1} \\
+        --species2 ${species2} \\
         --net1_unsigned ${net1_unsigned} \\
         --net2_unsigned ${net2_unsigned} \\
         --indir "\${indir_path}" \\
-        --outdir .
+        --outdir . \\
+        --unsigned_only
     """
 }
 
@@ -416,6 +447,7 @@ workflow {
       Output directory: ${params.outdir}
       Tissues         : ${tissues_list.join(', ')}
       Test mode       : ${params.test_mode}
+      Run unsigned    : ${params.run_unsigned}
 
     Resources:
       Max CPUs        : ${Runtime.runtime.availableProcessors()}
@@ -494,33 +526,34 @@ workflow {
             tuple(tissue, pair_id, species1, species2, step1_dir, net1_signed, net2_signed)
         }
 
-    // Join unsigned networks similarly
-    species_nets_unsigned = RCOMPLEX_02_COMPUTE_SPECIES_NETWORKS.out.network_unsigned
-        .map { tissue, species, net_file -> tuple([tissue, species], net_file) }
+    // Always run signed network filtering
+    RCOMPLEX_03_LOAD_AND_FILTER_NETWORKS(pair_with_nets_signed)
 
-    pair_with_nets_unsigned = RCOMPLEX_01_LOAD_FILTER.out.filtered_data
-        .map { tissue, pair_id, species1, species2, step1_dir ->
-            tuple([tissue, species1], [tissue, species2], tissue, pair_id, species1, species2, step1_dir)
-        }
-        .combine(species_nets_unsigned, by: 0)
-        .map { key1, key2, tissue, pair_id, species1, species2, step1_dir, net1_unsigned ->
-            tuple(key2, tissue, pair_id, species1, species2, step1_dir, net1_unsigned)
-        }
-        .combine(species_nets_unsigned, by: 0)
-        .map { key2, tissue, pair_id, species1, species2, step1_dir, net1_unsigned, net2_unsigned ->
-            tuple(tissue, pair_id, species1, species2, step1_dir, net1_unsigned, net2_unsigned)
-        }
-
-    RCOMPLEX_03_LOAD_AND_FILTER_NETWORKS(
-        pair_with_nets_signed.join(pair_with_nets_unsigned, by: [0, 1, 2, 3, 4])
-            .map { tissue, pair_id, species1, species2, step1_dir, net1_s, net2_s, net1_u, net2_u ->
-                tuple(tissue, pair_id, species1, species2, step1_dir, net1_s, net2_s, net1_u, net2_u)
-            }
-    )
-
-    // Step 7: Perform network comparisons (formerly Step 3)
+    // Step 7: Perform network comparisons
     RCOMPLEX_04_NETWORK_COMPARISON(RCOMPLEX_03_LOAD_AND_FILTER_NETWORKS.out.networks_signed)
-    RCOMPLEX_04_NETWORK_COMPARISON_UNSIGNED(RCOMPLEX_03_LOAD_AND_FILTER_NETWORKS.out.networks_unsigned)
+
+    // Unsigned processing (optional - controlled by --run_unsigned flag)
+    if (params.run_unsigned) {
+        // Join unsigned networks with pair metadata
+        species_nets_unsigned = RCOMPLEX_02_COMPUTE_SPECIES_NETWORKS.out.network_unsigned
+            .map { tissue, species, net_file -> tuple([tissue, species], net_file) }
+
+        pair_with_nets_unsigned = RCOMPLEX_01_LOAD_FILTER.out.filtered_data
+            .map { tissue, pair_id, species1, species2, step1_dir ->
+                tuple([tissue, species1], [tissue, species2], tissue, pair_id, species1, species2, step1_dir)
+            }
+            .combine(species_nets_unsigned, by: 0)
+            .map { key1, key2, tissue, pair_id, species1, species2, step1_dir, net1_unsigned ->
+                tuple(key2, tissue, pair_id, species1, species2, step1_dir, net1_unsigned)
+            }
+            .combine(species_nets_unsigned, by: 0)
+            .map { key2, tissue, pair_id, species1, species2, step1_dir, net1_unsigned, net2_unsigned ->
+                tuple(tissue, pair_id, species1, species2, step1_dir, net1_unsigned, net2_unsigned)
+            }
+
+        RCOMPLEX_03_LOAD_AND_FILTER_NETWORKS_UNSIGNED(pair_with_nets_unsigned)
+        RCOMPLEX_04_NETWORK_COMPARISON_UNSIGNED(RCOMPLEX_03_LOAD_AND_FILTER_NETWORKS_UNSIGNED.out.networks_unsigned)
+    }
 
     // Step 8: Generate summary statistics and plots (formerly Step 4)
     RCOMPLEX_05_SUMMARY_STATS(RCOMPLEX_04_NETWORK_COMPARISON.out.comparison)
@@ -536,28 +569,33 @@ workflow {
         .map { tissue, files -> tuple(tissue, "signed", files) }
         .combine(ch_n1_file)
 
-    // Prepare unsigned comparison files grouped by tissue
-    cliques_input_unsigned = RCOMPLEX_04_NETWORK_COMPARISON_UNSIGNED.out.comparison_unsigned
-        .map { tissue, _pair_id, comparison_file -> tuple(tissue, comparison_file) }
-        .groupTuple()
-        .map { tissue, files -> tuple(tissue, "unsigned", files) }
-        .combine(ch_n1_file)
+    // Conditionally add unsigned clique detection
+    if (params.run_unsigned) {
+        // Prepare unsigned comparison files grouped by tissue
+        cliques_input_unsigned = RCOMPLEX_04_NETWORK_COMPARISON_UNSIGNED.out.comparison_unsigned
+            .map { tissue, _pair_id, comparison_file -> tuple(tissue, comparison_file) }
+            .groupTuple()
+            .map { tissue, files -> tuple(tissue, "unsigned", files) }
+            .combine(ch_n1_file)
 
-    // Run streaming clique detection for both signed and unsigned (mix channels for single process call)
-    cliques_input_all = cliques_input_signed.mix(cliques_input_unsigned)
-    FIND_CLIQUES_STREAMING(cliques_input_all)
+        // Run streaming clique detection for both signed and unsigned
+        cliques_input_all = cliques_input_signed.mix(cliques_input_unsigned)
+        FIND_CLIQUES_STREAMING(cliques_input_all)
 
-    // Step 10: Polarity divergence (formerly Step 6)
-    // Join signed and unsigned network files for polarity comparison
-    divergence_input = RCOMPLEX_03_LOAD_AND_FILTER_NETWORKS.out.networks_signed
-        .map { tissue, pair_id, networks_signed -> tuple([tissue, pair_id], networks_signed) }
-        .join(
-            RCOMPLEX_03_LOAD_AND_FILTER_NETWORKS.out.networks_unsigned
-                .map { tissue, pair_id, networks_unsigned -> tuple([tissue, pair_id], networks_unsigned) }
-        )
-        .map { key, signed_net, unsigned_net -> tuple(key[0], key[1], signed_net, unsigned_net) }
+        // Polarity divergence (diagnostic - requires both signed and unsigned)
+        divergence_input = RCOMPLEX_03_LOAD_AND_FILTER_NETWORKS.out.networks_signed
+            .map { tissue, pair_id, networks_signed -> tuple([tissue, pair_id], networks_signed) }
+            .join(
+                RCOMPLEX_03_LOAD_AND_FILTER_NETWORKS_UNSIGNED.out.networks_unsigned
+                    .map { tissue, pair_id, networks_unsigned -> tuple([tissue, pair_id], networks_unsigned) }
+            )
+            .map { key, signed_net, unsigned_net -> tuple(key[0], key[1], signed_net, unsigned_net) }
 
-    POLARITY_DIVERGENCE(divergence_input)
+        POLARITY_DIVERGENCE(divergence_input)
+    } else {
+        // Signed-only clique detection
+        FIND_CLIQUES_STREAMING(cliques_input_signed)
+    }
 }
 
 // ============================================================================
