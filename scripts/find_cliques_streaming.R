@@ -186,8 +186,13 @@ if (is.na(n1_file) || !file.exists(n1_file)) {
   }
   
   # Create compact gene info lookup
+  # N1_clean.RDS has columns: HOG, OG, species, GeneID, life_cycle, is_core
   gene_info <- N1 %>%
-    select(GeneID = Gene_ID, Species, Life_habit) %>%
+    select(GeneID, Species = species, Life_habit = life_cycle) %>%
+    mutate(
+      # Capitalize life habit values to match expected format
+      Life_habit = tools::toTitleCase(Life_habit)
+    ) %>%
     distinct()
   
   cat("  ✓ Loaded annotations for", nrow(gene_info), "genes\n")
