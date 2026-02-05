@@ -275,6 +275,11 @@ find_cliques_for_hog <- function(hog_pairs, signed = TRUE, max_edges = 10000) {
 # ==============================================================================
 
 annotate_clique <- function(clique_row, gene_info) {
+  # Ensure clique_row is a tibble (rowwise + do() can sometimes pass a list)
+  if (is.list(clique_row) && !is.data.frame(clique_row)) {
+    clique_row <- as_tibble(clique_row)
+  }
+  
   if (is.null(gene_info)) {
     return(clique_row %>%
              mutate(
@@ -293,7 +298,9 @@ annotate_clique <- function(clique_row, gene_info) {
   species_list <- sort(unique(clique_gene_info$Species))
   life_habits <- sort(unique(clique_gene_info$Life_habit))
   
-  life_habit_class <- if (all(life_habits == "Annual")) {
+  life_habit_class <- if (length(life_habits) == 0) {
+    "Unknown"
+  } else if (all(life_habits == "Annual")) {
     "Annual"
   } else if (all(life_habits == "Perennial")) {
     "Perennial"
