@@ -133,7 +133,7 @@ Hierarchical ortholog group assignments mapping genes across species.
 | `species` | character | Species name (MUST match vst_hog.RDS) | "Brachypodium_distachyon" |
 | `GeneID` | character | Gene identifier (MUST match vst_hog.RDS) | "BRADI1G00010.1" |
 | `life_cycle` | character | Life habit annotation | "annual" or "perennial" |
-| `is_core` | logical | TRUE if gene is in core conserved set | TRUE, FALSE |
+| `is_core` | logical | TRUE if species is core-Pooideae | TRUE, FALSE |
 
 ### Structure Example
 
