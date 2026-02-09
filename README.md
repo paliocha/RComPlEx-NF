@@ -7,7 +7,7 @@
 Unlike traditional comparative genomics approaches that focus on sequence conservation alone, RComPlEx discovers genes that are:
 
 1. **Orthologous** - Share common evolutionary ancestry
-2. **Co-expressed** - Show correlated expression patterns within each species  
+2. **Co-expressed** - Show correlated expression patterns within each species
 3. **Functionally conserved** - Maintain similar regulatory relationships across species
 4. **Module members** - Part of complete functional networks (cliques), not just pairwise connections
 
@@ -25,7 +25,6 @@ This ensures discovery of **complete functional modules** with tight coordinatio
 - **[METHOD.md](METHOD.md)** - Detailed algorithm explanation, statistical methods, hypergeometric testing
 - **[INPUT_FORMAT.md](INPUT_FORMAT.md)** - Data requirements, file formats, and validation
 - **[INSTALLATION.md](INSTALLATION.md)** - Setup instructions for local, HPC, and container environments
-- **[PROCESS_FLOW.txt](PROCESS_FLOW.txt)** - Step-by-step execution flow with biological context (includes unsigned and polarity analysis)
 
 ## Scientific Background
 
@@ -48,7 +47,7 @@ This implementation focuses on comparing **annual vs. perennial grasses**:
 
 By stratifying cliques by life habit, RComPlEx identifies:
 - **Annual-specific modules**: Genes coordinated uniquely in annual species
-- **Perennial-specific modules**: Genes coordinated uniquely in perennial species  
+- **Perennial-specific modules**: Genes coordinated uniquely in perennial species
 - **Shared modules**: Core processes conserved across all plants
 
 ### Tissue Specificity
@@ -64,9 +63,8 @@ Tissue-specific cliques reveal organ-specialized regulatory networks.
 - **Tissue-specific analysis**: Separate processing for root and leaf tissues
 - **Life habit stratification**: Identifies annual-specific, perennial-specific, and shared cliques
 - **Multi-copy ortholog handling**: Clique detection naturally handles many-to-many orthology
-- **Modular design**: Can be run via convenient CLI or SLURM array jobs
+- **Per-pair network computation**: Networks computed on pair-specific gene sets, matching the original RComPlEx algorithm
 - **Centralized configuration**: All parameters in a single YAML file
-- **Polarity divergence analysis**: Compares signed vs. unsigned support to flag potential regulatory polarity changes
 
 ## Quick Start
 
@@ -76,11 +74,8 @@ Tissue-specific cliques reveal organ-specialized regulatory networks.
 # Test with 3 pairs per tissue (15-30 min - recommended first!)
 nextflow run main.nf -profile slurm --test_mode true
 
-# Full pipeline - signed networks only (default, faster)
+# Full pipeline
 nextflow run main.nf -profile slurm
-
-# Full pipeline with unsigned analysis + polarity divergence
-nextflow run main.nf -profile slurm --run_unsigned
 
 # Single tissue only
 nextflow run main.nf -profile slurm --tissues root
@@ -92,7 +87,7 @@ nextflow run main.nf -profile slurm -resume
 ### SLURM Submission (Recommended)
 
 ```bash
-# Submit long-running pipeline via SLURM (includes --run_unsigned by default)
+# Submit long-running pipeline via SLURM
 sbatch slurm/run_nf-rcomplex.sh
 ```
 
@@ -135,21 +130,6 @@ Located in `results/{tissue}/`:
 - `cliques_perennial.csv` - Perennial-specific cliques
 - `cliques_shared.csv` - Mixed annual/perennial cliques
 
-### Unsigned Clique Files (when `--run_unsigned` enabled)
-
-Located in `results/{tissue}/`:
-
-- `cliques_unsigned.qs2` - Unsigned cliques in qs2 format
-- `cliques_unsigned.csv` - Unsigned cliques in CSV format
-- `cliques_unsigned_annual.csv`, `cliques_unsigned_perennial.csv`, `cliques_unsigned_shared.csv`
-
-### Polarity Divergence Outputs (when `--run_unsigned` enabled)
-
-Located in `results/{tissue}/polarity/`:
-
-- `polarity_divergence_<pair_id>.tsv` – Columns: `tissue, pair_id, gene1, gene2, score_signed, score_unsigned, polarity_divergent`
-   - `polarity_divergent = TRUE` when sign differs and unsigned strength > 75th percentile
-
 ### Clique File Columns
 
 - `CliqueID`: Unique identifier (HOG_CliqueNumber)
@@ -170,7 +150,7 @@ Located in `results/{tissue}/polarity/`:
 
 ```
 RComPlEx/
-├── main.nf                          # Nextflow workflow (10 processes)
+├── main.nf                          # Nextflow workflow (6 processes)
 ├── nextflow.config                  # Nextflow execution config
 ├── config/
 │   └── pipeline_config.yaml         # Central analysis parameters
@@ -180,13 +160,11 @@ RComPlEx/
 ├── scripts/
 │   ├── prepare_single_pair.R        # Pair data preparation
 │   ├── rcomplex_01_load_filter.R    # Step 1: Load & filter data
-│   ├── rcomplex_02_compute_species_network.R  # Step 2: Per-species networks (reusable)
-│   ├── rcomplex_03_load_and_filter_networks.R # Step 3: Filter networks to pair
-│   ├── rcomplex_03_network_comparison.R       # Step 4: Network comparison
-│   ├── rcomplex_04_summary_stats.R            # Step 5: Summary statistics
-│   ├── find_cliques_streaming.R               # Streaming clique detection
-│   ├── polarity_divergence_report.R           # Polarity divergence analysis
-│   └── validate_inputs.R                      # Input validation
+│   ├── rcomplex_02_compute_networks.R       # Step 2: Per-pair network computation
+│   ├── rcomplex_03_network_comparison.R     # Step 3: Network comparison
+│   ├── rcomplex_04_summary_stats.R          # Step 4: Summary statistics
+│   ├── find_cliques_streaming.R             # Streaming clique detection
+│   └── validate_inputs.R                    # Input validation
 ├── slurm/
 │   └── run_nf-rcomplex.sh           # SLURM submission script
 ├── rcomplex_data/                   # Working directories
@@ -194,18 +172,17 @@ RComPlEx/
 │   └── leaf/                        # Leaf tissue analysis
 └── results/                         # Final pipeline outputs
     ├── root/                        # Root cliques & gene lists
-    │   └── polarity/                # Polarity divergence reports
     └── leaf/                        # Leaf cliques & gene lists
-        └── polarity/                # Polarity divergence reports
 ```
 
 ## Algorithm Overview
 
-### Pipeline Workflow (10 Processes)
+### Pipeline Workflow (6 Processes)
 
-The pipeline has two modes:
-- **Default (signed only)**: 7 processes - faster, analyzes signed correlation networks
-- **With `--run_unsigned`**: 10 processes - adds unsigned network analysis + polarity divergence
+```
+PREPARE_PAIR → RCOMPLEX_01_LOAD_FILTER → RCOMPLEX_02_COMPUTE_NETWORKS
+→ RCOMPLEX_04_NETWORK_COMPARISON → RCOMPLEX_05_SUMMARY_STATS → FIND_CLIQUES_STREAMING
+```
 
 #### Step 0: PREPARE_PAIR (Data Preparation)
 
@@ -230,19 +207,20 @@ The pipeline has two modes:
 
 ---
 
-#### Step 2: RCOMPLEX_02_COMPUTE_SPECIES_NETWORKS (Per-Species Networks)
+#### Step 2: RCOMPLEX_02_COMPUTE_NETWORKS (Per-Pair Networks)
 
-**Purpose**: Build gene co-expression networks for each species (computed once, reused across pairs)
+**Purpose**: Build gene co-expression networks for each species pair
+
+Networks are computed on the **pair-specific gene set** (genes with orthologs in *this specific pair*), matching the original RComPlEx algorithm. This ensures MR normalization ranks and density thresholds are calibrated to the exact gene universe used in the comparison.
 
 **Method**:
 
-1. **Correlation calculation**: 
+1. **Correlation calculation**:
    - Spearman correlation (default) - robust to outliers, detects monotonic relationships
    - Computes all pairwise gene correlations (gene × gene matrix)
-   - Gene universe is limited to genes that have an ortholog in any other species
 
 2. **Mutual Rank normalization**:
-   - Ranks correlations bidirectionally: gene_i → gene_j AND gene_j → gene_i  
+   - Ranks correlations bidirectionally: gene_i → gene_j AND gene_j → gene_i
    - Combines ranks: MR = √(rank_ij × rank_ji)
    - **Why?** Reduces spurious correlations, makes strengths comparable across species
 
@@ -250,24 +228,11 @@ The pipeline has two modes:
    - Keep top 3% of correlations (configurable)
    - Creates sparse network of strongest co-expression
 
-**Key Optimization**: Networks computed per species-tissue combination (not per pair), enabling massive reuse.
-
-**Output**: `02_network_signed.qs2`, `02_network_unsigned.qs2` (fast qs2 serialization)
+**Output**: `02_networks.qs2` (networks, thresholds, ortholog table in fast qs2 serialization)
 
 ---
 
-#### Step 3: RCOMPLEX_03_LOAD_AND_FILTER_NETWORKS (Pair-Specific Filtering)
-
-**Purpose**: Filter precomputed species networks to pair-specific ortholog genes
-
-- Loads precomputed species networks for both species in the pair
-- Subsets matrices to the pair's shared ortholog genes
-- Recalibrates density thresholds if needed for consistent network sparsity
-- **Output**: `02_networks_signed.qs2` (and `02_networks_unsigned.qs2` if `--run_unsigned`)
-
----
-
-#### Step 4: RCOMPLEX_04_NETWORK_COMPARISON (Conservation Testing)
+#### Step 3: RCOMPLEX_04_NETWORK_COMPARISON (Conservation Testing)
 
 **Purpose**: Test whether co-expression relationships are conserved between species
 
@@ -278,12 +243,12 @@ The pipeline has two modes:
    - Sp2_neighbors: All genes significantly co-expressed with geneB in Species 2
 
 2. **Test conservation bidirectionally**:
-   
+
    **Direction 1 (Sp1 → Sp2)**:
    - Question: "Do geneA's neighbors in Sp1 have orthologs that are geneB's neighbors in Sp2?"
    - Count overlap of conserved co-expression relationships
    - Hypergeometric test: P(overlap ≥ observed | random expectation)
-   
+
    **Direction 2 (Sp2 → Sp1)**:
    - Question: "Do geneB's neighbors in Sp2 have orthologs that are geneA's neighbors in Sp1?"
    - Ensures bidirectional conservation (not just one-way)
@@ -297,7 +262,7 @@ The pipeline has two modes:
 
 ---
 
-#### Step 5: RCOMPLEX_05_SUMMARY_STATS (Aggregation)
+#### Step 4: RCOMPLEX_05_SUMMARY_STATS (Aggregation)
 
 **Purpose**: Aggregate conservation statistics and generate diagnostic plots
 
@@ -307,7 +272,7 @@ The pipeline has two modes:
 
 ---
 
-#### Step 6: FIND_CLIQUES_STREAMING (Complete Module Discovery)
+#### Step 5: FIND_CLIQUES_STREAMING (Complete Module Discovery)
 
 **Purpose**: Identify multi-species gene cliques where ALL pairwise co-expression is conserved
 
@@ -333,21 +298,9 @@ c. **Annotate cliques**:
 
 **Memory Efficiency**: Only one HOG's data in memory at a time.
 
-**Output**: 
+**Output**:
 - `cliques.qs2`, `cliques.csv` (all cliques)
 - `cliques_annual.csv`, `cliques_perennial.csv`, `cliques_shared.csv`
-
----
-
-#### Optional: POLARITY_DIVERGENCE (Regulatory Direction Analysis)
-
-**Enabled with**: `--run_unsigned`
-
-**Purpose**: Flag edges where signed and unsigned support diverge (potential regulatory polarity changes)
-
-- Compares signed vs unsigned network comparison results
-- Identifies gene pairs with strong unsigned support but weak/opposite signed support
-- **Output**: `polarity_divergence_<pair_id>.tsv`
 
 ---
 
@@ -387,29 +340,23 @@ c. **Annotate cliques**:
 
 ### Species List
 
-**Annual (5 species):**
+**Annual (4 species):**
 - Brachypodium distachyon
 - Hordeum vulgare
 - Vulpia bromoides
 - Briza maxima
-- Poa annua
 
-**Perennial (8 species):**
+**Perennial (4 species):**
 - Brachypodium sylvaticum
 - Hordeum jubatum
-- Poa supina
 - Briza media
 - Festuca pratensis
-- Melica nutans
-- Nassella pubiflora
-- Oloptum miliaceum
 
 ## Performance
 
 ### Optimized for NMBU Orion HPC:
 - **Test mode**: 15-30 minutes (3 pairs per tissue)
-- **Full pipeline (signed only)**: 2-6 hours
-- **Full pipeline (with unsigned)**: 4-12 hours
+- **Full pipeline**: 2-6 hours
 - **Parallel execution**: Up to 30 jobs simultaneously (label-dependent)
 - **Resources per job**: Adaptive (8 GB → 800 GB depending on step)
 
@@ -419,12 +366,10 @@ c. **Annotate cliques**:
 |---------|------|--------|------|----------|
 | PREPARE_PAIR | 2 | 8 GB | 15m | 20 |
 | RCOMPLEX_01_LOAD_FILTER | 2 | 8 GB | 15m | 20 |
-| RCOMPLEX_02_COMPUTE_SPECIES_NETWORKS | 24→36 | 800 GB | 144h | 13 |
-| RCOMPLEX_03_LOAD_AND_FILTER_NETWORKS | 2 | 300 GB | 2h | 20 |
+| RCOMPLEX_02_COMPUTE_NETWORKS | 24→36 | 800 GB | 144h | 10 |
 | RCOMPLEX_04_NETWORK_COMPARISON | 12→24 | 200→600 GB | 72h | 10 |
 | RCOMPLEX_05_SUMMARY_STATS | 4 | 16 GB | 24h | 10 |
 | FIND_CLIQUES_STREAMING | 4 | 64→256 GB | 24h | 4 |
-| POLARITY_DIVERGENCE | 4 | 200→600 GB | 72h | - |
 
 ### Disk Space Requirements:
 - Intermediate files: 10-50 GB

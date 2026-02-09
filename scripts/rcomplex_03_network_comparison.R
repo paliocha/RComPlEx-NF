@@ -124,56 +124,23 @@ dir.create(opt$outdir, showWarnings = FALSE, recursive = TRUE)
 
 cat("Loading data from previous steps...\n")
 
-# Load networks from step 3 (includes ortho table, species names, networks, and thresholds)
-# Check for qs2 format first (preferred), then fall back to RData for legacy compatibility
-input_file_signed_qs2 <- file.path(opt$indir, "02_networks_signed.qs2")
-input_file_unsigned_qs2 <- file.path(opt$indir, "02_networks_unsigned.qs2")
-input_file_signed_rdata <- file.path(opt$indir, "02_networks_signed.RData")
-input_file_unsigned_rdata <- file.path(opt$indir, "02_networks_unsigned.RData")
-
-if (file.exists(input_file_signed_qs2)) {
-  cat("  Loading signed networks from (qs2):", input_file_signed_qs2, "\n")
-  data <- qs_read(input_file_signed_qs2)
-  species1_net <- data$species1_net_signed
-  species2_net <- data$species2_net_signed
-  species1_thr <- data$species1_thr_signed
-  species2_thr <- data$species2_thr_signed
-  ortho <- data$ortho
-  species1_name <- data$species1_name
-  species2_name <- data$species2_name
-  network_type <- "signed"
-} else if (file.exists(input_file_unsigned_qs2)) {
-  cat("  Loading unsigned networks from (qs2):", input_file_unsigned_qs2, "\n")
-  data <- qs_read(input_file_unsigned_qs2)
-  species1_net <- data$species1_net_unsigned
-  species2_net <- data$species2_net_unsigned
-  species1_thr <- data$species1_thr_unsigned
-  species2_thr <- data$species2_thr_unsigned
-  ortho <- data$ortho
-  species1_name <- data$species1_name
-  species2_name <- data$species2_name
-  network_type <- "unsigned"
-} else if (file.exists(input_file_signed_rdata)) {
-  cat("  Loading signed networks from (RData):", input_file_signed_rdata, "\n")
-  load(input_file_signed_rdata)
-  species1_net <- species1_net_signed
-  species2_net <- species2_net_signed
-  species1_thr <- species1_thr_signed
-  species2_thr <- species2_thr_signed
-  network_type <- "signed"
-} else if (file.exists(input_file_unsigned_rdata)) {
-  cat("  Loading unsigned networks from (RData):", input_file_unsigned_rdata, "\n")
-  load(input_file_unsigned_rdata)
-  species1_net <- species1_net_unsigned
-  species2_net <- species2_net_unsigned
-  species1_thr <- species1_thr_unsigned
-  species2_thr <- species2_thr_unsigned
-  network_type <- "unsigned"
-} else {
-  stop("Networks file not found. Expected one of:\n  ", 
-       input_file_signed_qs2, "\n  ", input_file_unsigned_qs2,
-       "\n  ", input_file_signed_rdata, "\n  or\n  ", input_file_unsigned_rdata)
+# Load networks from step 2 (per-pair networks with ortho table)
+input_file <- file.path(opt$indir, "02_networks.qs2")
+if (!file.exists(input_file)) {
+  stop("Networks file not found: ", input_file)
 }
+
+cat("  Loading networks from:", input_file, "\n")
+data <- qs_read(input_file)
+species1_net <- data$species1_net
+species2_net <- data$species2_net
+species1_thr <- data$species1_thr
+species2_thr <- data$species2_thr
+ortho <- data$ortho
+species1_name <- data$species1_name
+species2_name <- data$species2_name
+rm(data)
+gc(verbose = FALSE)
 
 cat("✓ Data loaded successfully\n\n")
 
@@ -318,9 +285,7 @@ cat("    -", species2_name, "genes:", length(unique(comparison$Species2)), "\n\n
 # SAVE RESULTS
 # ==============================================================================
 
-# Construct output filename with _unsigned suffix if processing unsigned networks
-output_suffix <- if (network_type == "unsigned") "_unsigned" else ""
-output_file <- file.path(opt$outdir, paste0("03_", opt$pair_id, output_suffix, ".RData"))
+output_file <- file.path(opt$outdir, paste0("03_", opt$pair_id, ".RData"))
 cat("Saving comparison results to:", output_file, "\n")
 save(comparison, species1_thr, species2_thr,
      species1_name, species2_name,

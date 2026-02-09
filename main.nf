@@ -22,48 +22,47 @@ def helpMessage() {
     ═══════════════════════════════════════════════════════════════
     RComPlEx Pipeline - Comparative Co-expression Network Analysis
     ═══════════════════════════════════════════════════════════════
-    
+
     Usage:
         nextflow run main.nf [options]
-    
+
     Required:
         None (uses defaults from config/pipeline_config.yaml)
-    
+
     Optional:
         --tissues <tissue>     Tissues to analyze [default: root,leaf]
                                Use --tissues root or --tissues leaf for single tissue
         --test_mode            Run with first 3 pairs only [default: false]
-        --run_unsigned         Run unsigned network analysis + polarity divergence [default: false]
         --workdir <path>       Working directory for intermediate files [default: ${projectDir}]
         --outdir <path>        Output directory for final results [default: ${projectDir}/results]
         -w <path>              Nextflow work directory for temp files [default: ./work]
         --config <path>        Config file [default: config/pipeline_config.yaml]
         --help                 Show this message and exit
-    
+
     Profiles:
         -profile slurm         SLURM executor (default)
         -profile standard      Local executor
         -profile test          Test mode with limited pairs
-    
+
     Examples:
         # Basic run
         nextflow run main.nf -profile slurm
-        
+
         # Single tissue
         nextflow run main.nf -profile slurm --tissues root
-        
+
         # Custom directories
         nextflow run main.nf -profile slurm --workdir /scratch/data --outdir /project/results
-        
+
         # Custom Nextflow work directory (for temp files)
         nextflow run main.nf -profile slurm -w /scratch/work
-        
+
         # Test mode
         nextflow run main.nf -profile test
-        
+
         # Resume from cached steps
         nextflow run main.nf -resume
-    
+
     ═══════════════════════════════════════════════════════════════
     """.stripIndent()
 }
@@ -78,7 +77,7 @@ process PREPARE_PAIR {
     cache 'lenient'  // Ignore resource changes for caching
     // OPTIMIZED: Use copy instead of symlink to avoid cross-filesystem issues
     publishDir "${params.workdir}/rcomplex_data/${tissue}/pairs/${sp1}_${sp2}", mode: 'copy', overwrite: true
-    
+
     // Resources controlled by config (label 'low_mem')
 
     input:
@@ -110,7 +109,7 @@ process RCOMPLEX_01_LOAD_FILTER {
     label 'low_mem'
     tag "${tissue}:${pair_id}"
     cache 'lenient'  // Ignore resource changes for caching
-    
+
     // Resources controlled by config (label 'low_mem')
 
     input:
@@ -134,104 +133,27 @@ process RCOMPLEX_01_LOAD_FILTER {
     """
 }
 
-process RCOMPLEX_02_COMPUTE_SPECIES_NETWORKS {
+process RCOMPLEX_02_COMPUTE_NETWORKS {
     label 'high_mem'
-    tag "${tissue}:${species}"
+    tag "${tissue}:${pair_id}"
     cache 'lenient'
-    
-    // Resources controlled by config - similar to old RCOMPLEX_02 but per species
 
     input:
-    tuple val(tissue), val(species)
+    tuple val(tissue), val(pair_id), val(species1), val(species2), path(step1_data)
 
     output:
-    tuple val(tissue), val(species), path("02_network_signed.qs2"), emit: network_signed
-    tuple val(tissue), val(species), path("02_network_unsigned.qs2"), emit: network_unsigned, optional: true
+    tuple val(tissue), val(pair_id), path("02_networks.qs2"), emit: networks
 
     script:
     """
-    #!/bin/bash
-    set -e
-
-    # Step 2: Compute species co-expression network
-    Rscript "${projectDir}/scripts/rcomplex_02_compute_species_network.R" \\
-        --tissue ${tissue} \\
-        --species ${species} \\
-        --config "${projectDir}/config/pipeline_config.yaml" \\
-        --workdir "${params.workdir}" \\
-        --outdir . \\
+    Rscript "${projectDir}/scripts/rcomplex_02_compute_networks.R" \
+        --tissue ${tissue} \
+        --pair_id ${pair_id} \
+        --config "${projectDir}/config/pipeline_config.yaml" \
+        --workdir "${params.workdir}" \
+        --indir . \
+        --outdir . \
         --cores ${task.cpus}
-    """
-}
-
-process RCOMPLEX_03_LOAD_AND_FILTER_NETWORKS {
-    label 'low_mem'
-    tag "${tissue}:${pair_id}"
-    cache 'lenient'
-    
-    // Lightweight process - just loads and filters pre-computed matrices
-
-    input:
-    tuple val(tissue), val(pair_id), val(species1), val(species2), path(step1_dir),
-          path(net1_signed, stageAs: 'sp1_net_signed.qs2'), 
-          path(net2_signed, stageAs: 'sp2_net_signed.qs2')
-
-    output:
-    tuple val(tissue), val(pair_id), path("02_networks_signed.qs2"), emit: networks_signed
-
-    script:
-    """
-    #!/bin/bash
-    set -e
-
-    # Extract directory path (step1_dir is the RData file, but script needs the directory)
-    indir_path=\$(dirname "${step1_dir}")
-
-    # Step 3: Load pre-computed networks and filter to pair orthologs (signed only)
-    Rscript "${projectDir}/scripts/rcomplex_03_load_and_filter_networks.R" \\
-        --tissue ${tissue} \\
-        --pair_id ${pair_id} \\
-        --species1 ${species1} \\
-        --species2 ${species2} \\
-        --net1_signed ${net1_signed} \\
-        --net2_signed ${net2_signed} \\
-        --indir "\${indir_path}" \\
-        --outdir . \\
-        --signed_only
-    """
-}
-
-// Unsigned version of the filter process (only runs when --run_unsigned is set)
-process RCOMPLEX_03_LOAD_AND_FILTER_NETWORKS_UNSIGNED {
-    label 'low_mem'
-    tag "${tissue}:${pair_id}"
-    cache 'lenient'
-
-    input:
-    tuple val(tissue), val(pair_id), val(species1), val(species2), path(step1_dir),
-          path(net1_unsigned, stageAs: 'sp1_net_unsigned.qs2'), 
-          path(net2_unsigned, stageAs: 'sp2_net_unsigned.qs2')
-
-    output:
-    tuple val(tissue), val(pair_id), path("02_networks_unsigned.qs2"), emit: networks_unsigned
-
-    script:
-    """
-    #!/bin/bash
-    set -e
-
-    indir_path=\$(dirname "${step1_dir}")
-
-    Rscript "${projectDir}/scripts/rcomplex_03_load_and_filter_networks.R" \\
-        --tissue ${tissue} \\
-        --pair_id ${pair_id} \\
-        --species1 ${species1} \\
-        --species2 ${species2} \\
-        --net1_unsigned ${net1_unsigned} \\
-        --net2_unsigned ${net2_unsigned} \\
-        --indir "\${indir_path}" \\
-        --outdir . \\
-        --unsigned_only
     """
 }
 
@@ -239,7 +161,7 @@ process RCOMPLEX_04_NETWORK_COMPARISON {
     label 'high_mem'
     tag "${tissue}:${pair_id}"
     cache 'lenient'  // Ignore resource changes for caching
-    
+
     // Resources controlled by config (withName: RCOMPLEX_04_NETWORK_COMPARISON)
 
     input:
@@ -253,7 +175,7 @@ process RCOMPLEX_04_NETWORK_COMPARISON {
     #!/bin/bash
     set -e
 
-    # Step 4: Network comparison (formerly Step 3)
+    # Step 3: Network comparison
     Rscript "${projectDir}/scripts/rcomplex_03_network_comparison.R" \\
         --tissue ${tissue} \\
         --pair_id ${pair_id} \\
@@ -265,45 +187,13 @@ process RCOMPLEX_04_NETWORK_COMPARISON {
     """
 }
 
-// Unsigned comparison consuming unsigned MR networks
-process RCOMPLEX_04_NETWORK_COMPARISON_UNSIGNED {
-    label 'high_mem'
-    tag "${tissue}:${pair_id}"
-    cache 'lenient'  // Ignore resource changes for caching
-    
-    // Resources controlled by config (withName: RCOMPLEX_04_NETWORK_COMPARISON_UNSIGNED)
-
-    input:
-    tuple val(tissue), val(pair_id), path(networks_unsigned)
-
-    output:
-    tuple val(tissue), val(pair_id), path("03_${pair_id}_unsigned.RData"), emit: comparison_unsigned
-
-    script:
-    """
-    #!/bin/bash
-    set -e
-
-    # Step 3 (unsigned): Network comparison using unsigned MR networks
-    # Using ${task.cpus} CPUs for parallel ortholog comparison
-    Rscript "${projectDir}/scripts/rcomplex_03_network_comparison.R" \
-        --tissue ${tissue} \
-        --pair_id ${pair_id} \
-        --config "${projectDir}/config/pipeline_config.yaml" \
-        --workdir "${params.workdir}" \
-        --indir . \
-        --outdir . \
-        --cores ${task.cpus}
-    """
-}
-
 process RCOMPLEX_05_SUMMARY_STATS {
     label 'low_mem'
     tag "${tissue}:${pair_id}"
     cache 'lenient'  // Ignore resource changes for caching
     // OPTIMIZED: Use copy mode for better cross-filesystem compatibility
     publishDir "${params.workdir}/rcomplex_data/${tissue}/results/${pair_id}", mode: 'copy', overwrite: true
-    
+
     // Resources controlled by config (label 'low_mem')
 
     input:
@@ -339,20 +229,19 @@ process RCOMPLEX_05_SUMMARY_STATS {
 
 process FIND_CLIQUES_STREAMING {
     label 'high_mem'
-    tag "${tissue}:${mode}"
+    tag "${tissue}"
     cache 'lenient'
     publishDir "${params.outdir}/${tissue}", mode: 'copy'
-    
+
     input:
-    tuple val(tissue), val(mode), path(comparison_files), path(n1_file)
+    tuple val(tissue), path(comparison_files), path(n1_file)
 
     output:
-    tuple val(tissue), val(mode), path("cliques${mode == 'unsigned' ? '_unsigned' : ''}.qs2"), emit: cliques_qs2
-    tuple val(tissue), val(mode), path("cliques${mode == 'unsigned' ? '_unsigned' : ''}.csv"), emit: cliques_csv
-    tuple val(tissue), val(mode), path("cliques${mode == 'unsigned' ? '_unsigned' : ''}_*.csv"), emit: cliques_by_lifehabit, optional: true
+    tuple val(tissue), path("cliques.qs2"), emit: cliques_qs2
+    tuple val(tissue), path("cliques.csv"), emit: cliques_csv
+    tuple val(tissue), path("cliques_*.csv"), emit: cliques_by_lifehabit, optional: true
 
     script:
-    def file_pattern = mode == 'signed' ? '03_comparison.RData' : '03_comparison_unsigned.RData'
     """
     #!/bin/bash
     set -e
@@ -362,60 +251,22 @@ process FIND_CLIQUES_STREAMING {
 
     # Link comparison files into expected structure
     for file in 03_*.RData; do
-        # For signed mode, skip unsigned files; for unsigned mode, only process unsigned files
-        if [[ "${mode}" == "signed" && "\$file" == *"_unsigned.RData" ]]; then
-            continue
-        fi
-        if [[ "${mode}" == "unsigned" && "\$file" != *"_unsigned.RData" ]]; then
-            continue
-        fi
-        
         # Extract pair_id from filename
         pair_id=\${file#03_}
-        if [[ "${mode}" == "unsigned" ]]; then
-            pair_id=\${pair_id%_unsigned.RData}
-        else
-            pair_id=\${pair_id%.RData}
-        fi
-        
+        pair_id=\${pair_id%.RData}
+
         pair_dir="rcomplex_results/${tissue}/results/\${pair_id}"
         mkdir -p "\$pair_dir"
-        ln -s "\$(realpath \$file)" "\$pair_dir/${file_pattern}"
+        ln -s "\$(realpath \$file)" "\$pair_dir/03_comparison.RData"
     done
 
     Rscript "${projectDir}/scripts/find_cliques_streaming.R" \\
         --tissue ${tissue} \\
-        --mode ${mode} \\
+        --mode signed \\
         --config "${projectDir}/config/pipeline_config.yaml" \\
         --workdir "${params.workdir}" \\
         --results_dir rcomplex_results/${tissue}/results \\
         --n1_file ${n1_file} \\
-        --outdir .
-    """
-}
-
-process POLARITY_DIVERGENCE {
-    label 'low_mem'
-    tag "${tissue}:${pair_id}"
-    cache 'lenient'
-    publishDir "${params.outdir}/${tissue}/polarity", mode: 'copy', overwrite: true
-
-    input:
-    tuple val(tissue), val(pair_id), path(signed_cmp), path(unsigned_cmp)
-
-    output:
-    tuple val(tissue), val(pair_id), path("polarity_divergence_${pair_id}.tsv"), emit: divergence_report
-
-    script:
-    """
-    #!/bin/bash
-    set -e
-
-    Rscript "${projectDir}/scripts/polarity_divergence_report.R" \
-        --tissue ${tissue} \
-        --pair_id ${pair_id} \
-        --signed ${signed_cmp} \
-        --unsigned ${unsigned_cmp} \
         --outdir .
     """
 }
@@ -425,7 +276,7 @@ process POLARITY_DIVERGENCE {
 // ============================================================================
 
 workflow {
-    
+
     // Show help message if requested
     if (params.help) {
         helpMessage()
@@ -447,7 +298,6 @@ workflow {
       Output directory: ${params.outdir}
       Tissues         : ${tissues_list.join(', ')}
       Test mode       : ${params.test_mode}
-      Run unsigned    : ${params.run_unsigned}
 
     Resources:
       Max CPUs        : ${Runtime.runtime.availableProcessors()}
@@ -464,28 +314,10 @@ workflow {
     }
 
     // ========================================================================
-    // REFACTORED ARCHITECTURE: Per-species network computation
+    // PIPELINE: Per-pair network computation (matches original RComPlEx.Rmd)
     // ========================================================================
 
-    // Step 1: Create species-tissue tuples for network computation
-    // Build tuples programmatically then create channel
-    def species_tissue_list = []
-    tissues_list.each { tissue ->
-        all_species.each { species ->
-            species_tissue_list << tuple(tissue, species)
-        }
-    }
-    if (params.test_mode) {
-        log.info "TEST MODE: Limiting to first 5 species-tissue combinations"
-        species_tissue_list = species_tissue_list.take(5 * tissues_list.size())
-    }
-    species_tissue_tuples = Channel.of(*species_tissue_list)
-
-    // Step 2: Compute co-expression networks once per species-tissue
-    RCOMPLEX_02_COMPUTE_SPECIES_NETWORKS(species_tissue_tuples)
-
-    // Step 3: Create pair tuples for comparisons
-    // Build all pairs programmatically
+    // Step 1: Create pair tuples for comparisons
     def all_pairs_list = []
     tissues_list.each { tissue ->
         (0..<all_species.size()).each { i ->
@@ -502,100 +334,30 @@ workflow {
     }
     pair_tuples = Channel.of(*all_pairs_list)
 
-    // Step 4: Prepare pair-specific orthologs
+    // Step 2: Prepare pair-specific orthologs
     PREPARE_PAIR(pair_tuples)
 
-    // Step 5: Load and filter data to shared orthologs
+    // Step 3: Load and filter data to shared orthologs
     RCOMPLEX_01_LOAD_FILTER(PREPARE_PAIR.out.pair_id)
 
-    // Step 6: Load pre-computed networks and filter to pair orthologs
-    // Join signed networks with pair metadata
-    species_nets_signed = RCOMPLEX_02_COMPUTE_SPECIES_NETWORKS.out.network_signed
-        .map { tissue, species, net_file -> tuple([tissue, species], net_file) }
+    // Step 4: Compute per-pair co-expression networks
+    RCOMPLEX_02_COMPUTE_NETWORKS(RCOMPLEX_01_LOAD_FILTER.out.filtered_data)
 
-    pair_with_nets_signed = RCOMPLEX_01_LOAD_FILTER.out.filtered_data
-        .map { tissue, pair_id, species1, species2, step1_dir ->
-            tuple([tissue, species1], [tissue, species2], tissue, pair_id, species1, species2, step1_dir)
-        }
-        .combine(species_nets_signed, by: 0)  // Join on [tissue, species1]
-        .map { key1, key2, tissue, pair_id, species1, species2, step1_dir, net1_signed ->
-            tuple(key2, tissue, pair_id, species1, species2, step1_dir, net1_signed)
-        }
-        .combine(species_nets_signed, by: 0)  // Join on [tissue, species2]
-        .map { key2, tissue, pair_id, species1, species2, step1_dir, net1_signed, net2_signed ->
-            tuple(tissue, pair_id, species1, species2, step1_dir, net1_signed, net2_signed)
-        }
+    // Step 5: Perform network comparisons
+    RCOMPLEX_04_NETWORK_COMPARISON(RCOMPLEX_02_COMPUTE_NETWORKS.out.networks)
 
-    // Always run signed network filtering
-    RCOMPLEX_03_LOAD_AND_FILTER_NETWORKS(pair_with_nets_signed)
-
-    // Step 7: Perform network comparisons
-    RCOMPLEX_04_NETWORK_COMPARISON(RCOMPLEX_03_LOAD_AND_FILTER_NETWORKS.out.networks_signed)
-
-    // Unsigned processing (optional - controlled by --run_unsigned flag)
-    if (params.run_unsigned) {
-        // Join unsigned networks with pair metadata
-        species_nets_unsigned = RCOMPLEX_02_COMPUTE_SPECIES_NETWORKS.out.network_unsigned
-            .map { tissue, species, net_file -> tuple([tissue, species], net_file) }
-
-        pair_with_nets_unsigned = RCOMPLEX_01_LOAD_FILTER.out.filtered_data
-            .map { tissue, pair_id, species1, species2, step1_dir ->
-                tuple([tissue, species1], [tissue, species2], tissue, pair_id, species1, species2, step1_dir)
-            }
-            .combine(species_nets_unsigned, by: 0)
-            .map { key1, key2, tissue, pair_id, species1, species2, step1_dir, net1_unsigned ->
-                tuple(key2, tissue, pair_id, species1, species2, step1_dir, net1_unsigned)
-            }
-            .combine(species_nets_unsigned, by: 0)
-            .map { key2, tissue, pair_id, species1, species2, step1_dir, net1_unsigned, net2_unsigned ->
-                tuple(tissue, pair_id, species1, species2, step1_dir, net1_unsigned, net2_unsigned)
-            }
-
-        RCOMPLEX_03_LOAD_AND_FILTER_NETWORKS_UNSIGNED(pair_with_nets_unsigned)
-        RCOMPLEX_04_NETWORK_COMPARISON_UNSIGNED(RCOMPLEX_03_LOAD_AND_FILTER_NETWORKS_UNSIGNED.out.networks_unsigned)
-    }
-
-    // Step 8: Generate summary statistics and plots (formerly Step 4)
+    // Step 6: Generate summary statistics and plots
     RCOMPLEX_05_SUMMARY_STATS(RCOMPLEX_04_NETWORK_COMPARISON.out.comparison)
 
-    // Step 9: STREAMING CLIQUE DETECTION (two-pass approach)
-    // Create N1 file channel once
+    // Step 7: Streaming clique detection
     ch_n1_file = Channel.value(file(params.n1_file))
-    
-    // Prepare signed comparison files grouped by tissue
-    cliques_input_signed = RCOMPLEX_04_NETWORK_COMPARISON.out.comparison
+
+    cliques_input = RCOMPLEX_04_NETWORK_COMPARISON.out.comparison
         .map { tissue, _pair_id, comparison_file -> tuple(tissue, comparison_file) }
         .groupTuple()
-        .map { tissue, files -> tuple(tissue, "signed", files) }
         .combine(ch_n1_file)
 
-    // Conditionally add unsigned clique detection
-    if (params.run_unsigned) {
-        // Prepare unsigned comparison files grouped by tissue
-        cliques_input_unsigned = RCOMPLEX_04_NETWORK_COMPARISON_UNSIGNED.out.comparison_unsigned
-            .map { tissue, _pair_id, comparison_file -> tuple(tissue, comparison_file) }
-            .groupTuple()
-            .map { tissue, files -> tuple(tissue, "unsigned", files) }
-            .combine(ch_n1_file)
-
-        // Run streaming clique detection for both signed and unsigned
-        cliques_input_all = cliques_input_signed.mix(cliques_input_unsigned)
-        FIND_CLIQUES_STREAMING(cliques_input_all)
-
-        // Polarity divergence (diagnostic - requires both signed and unsigned)
-        divergence_input = RCOMPLEX_03_LOAD_AND_FILTER_NETWORKS.out.networks_signed
-            .map { tissue, pair_id, networks_signed -> tuple([tissue, pair_id], networks_signed) }
-            .join(
-                RCOMPLEX_03_LOAD_AND_FILTER_NETWORKS_UNSIGNED.out.networks_unsigned
-                    .map { tissue, pair_id, networks_unsigned -> tuple([tissue, pair_id], networks_unsigned) }
-            )
-            .map { key, signed_net, unsigned_net -> tuple(key[0], key[1], signed_net, unsigned_net) }
-
-        POLARITY_DIVERGENCE(divergence_input)
-    } else {
-        // Signed-only clique detection
-        FIND_CLIQUES_STREAMING(cliques_input_signed)
-    }
+    FIND_CLIQUES_STREAMING(cliques_input)
 }
 
 // ============================================================================
@@ -621,7 +383,7 @@ workflow.onComplete {
     summary['Work dir'] = workflow.workDir
     summary['Profile'] = workflow.profile
     summary['Container'] = params.container
-    
+
     log.info """
     ══════════════════════════════════════════════════════════════
     Pipeline completed!
@@ -634,17 +396,17 @@ workflow.onComplete {
     Results   : ${params.outdir}
     ══════════════════════════════════════════════════════════════
     """.stripIndent()
-    
+
     // Write detailed summary to file
     def outDirPath = params.outdir.toString()
     def summaryFilePath = new File("${outDirPath}/pipeline_summary.txt")
     summaryFilePath.parentFile.mkdirs()
-    
+
     // Delete if exists as directory (edge case)
     if (summaryFilePath.exists() && summaryFilePath.isDirectory()) {
         summaryFilePath.deleteDir()
     }
-    
+
     summaryFilePath.text = summary.collect { k, v -> "${k.padRight(20)}: $v" }.join('\n')
 }
 
